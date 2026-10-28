@@ -2330,8 +2330,8 @@ async function resLoad(){
   try { const q = await S.db.collection("records").get(); q.docs.forEach(d=>recs.push(d.data())); } catch(e){ notes.push("アプリ内の記録を読めませんでした。"); }
   try {
     const mine = S.db.collection("data/users/"+S.uid);
-    const [a, b, c] = await Promise.all([mine.doc("rec_staff").get(), mine.doc("rec_gp").get(), mine.doc("rec_excl").get()]);
-    X.staffDoc = a.exists ? a.data() : {list:{}}; X.gpDoc = b.exists ? b.data() : {map:{}}; X.exclDoc = c.exists ? c.data() : {ids:{}};
+    const [a, b, c, d] = await Promise.all([mine.doc("rec_staff").get(), mine.doc("rec_gp").get(), mine.doc("rec_excl").get(), mine.doc("rec_dismiss").get()]);
+    X.staffDoc = a.exists ? a.data() : {list:{}}; X.gpDoc = b.exists ? b.data() : {map:{}}; X.exclDoc = c.exists ? c.data() : {ids:{}}; X.dismissDoc = d.exists ? d.data() : {keys:{}};
   } catch(e){ X.staffDoc = X.staffDoc || {list:{}}; X.gpDoc = X.gpDoc || {map:{}}; notes.push("承認済みの社員を読めませんでした。"); }
   const byId = new Map(); for (const r of recs) if (r && r.id && !byId.has(r.id)) byId.set(r.id, r);
   X.recs = [...byId.values()]; X.err = notes.join(" "); X.loading = false; X.loaded = true;
@@ -2417,6 +2417,12 @@ function resPeriod(r){
   if (X.period==="year") return d.slice(0,4)===String(now.getFullYear());
   return true;
 }
+/* 承認待ちから消す（true）／戻す（false）。社長だけのデータ rec_dismiss に「名前|番号」で覚える。元の記録は消さない */
+async function resDismiss(k, on){
+  const X = resState(), keys = {...(X.dismissDoc?.keys||{})};
+  if (on) keys[k] = nowIso(); else delete keys[k];
+  if (await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_dismiss").set({keys}), on ? "承認待ちから消しました" : "承認待ちに戻しました")){ X.dismissDoc = {keys}; render(); }
+}
 async function resSaveStaff(list){
   const X = resState();
   if (await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_staff").set({list}), "保存しました")){ X.staffDoc = {list}; await resFixGp(); render(); }
@@ -2435,8 +2441,12 @@ function resultsView(){
   const tot = k => rows.reduce((a,r)=>a+r[k],0);
   const rate = (a,b) => b ? Math.round(a/b*100)+"%" : "—";
   /* 未承認：名前が承認されていない／暗証番号が合わない記録 */
-  const pend = {}; for (const r of X.recs) if (!r.uid && r.kind!=="cancel" && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){ const k = r.name+"|"+r.pin; (pend[k] = pend[k] || {name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
-  const pends = Object.values(pend);
+  /* 社員が「取り消す」を押した記録は数えない。社長が「消す」（または承認済みから「外す」）にした名前＋番号は、もう出さない */
+  const cancelled = new Set(X.recs.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref)), dis = X.dismissDoc?.keys || {};
+  const pend = {}, hidden = {};
+  for (const r of X.recs) if (!r.uid && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
+    const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend; (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
+  const pends = Object.values(pend), hiddens = Object.values(hidden);
   const per = [["month","今月"],["last","先月"],["year","今年"],["all","全期間"]];
   return h("div",{class:"stack"},
     h("div",{class:"pagehead"}, h("h1",null,"実績"), h("p",null,"社員別の営業記録です（社長だけが見られます）。粗利は成約時点の原価で計算しています。"),
@@ -2460,11 +2470,15 @@ function resultsView(){
       h("div",{class:"log"}, pends.length ? pends.map(x=>h("div",{class:"e"},
         h("div",null, h("b",null,x.name), "　記録 "+x.n+" 件", x.known ? h("span",{class:"pill bad",style:"margin-left:6px"},"登録済みの番号と違う") : null),
         h("div",{class:"row"}, x.known ? h("span",{class:"small muted"},"本人が番号を打ち間違えた場合は「この番号で承認」で上書きできます。") : null,
-          h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:{pin:String(x.pin), at:nowIso()}})}, x.known ? "この番号で承認" : "社員として承認")))) : h("div",{class:"empty"},"ありません。"))),
+          h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:{pin:String(x.pin), at:nowIso()}})}, x.known ? "この番号で承認" : "社員として承認"),
+          deleteControl("pd:"+x.k, "消す", ()=>resDismiss(x.k, true))))) : h("div",{class:"empty"},"ありません。")),
+      hiddens.length ? h("details",{class:"x"}, h("summary",null,"消した承認待ち（"+hiddens.length+"件）"),
+        h("div",{class:"log"}, hiddens.map(x=>h("div",{class:"e"}, h("div",{class:"row"}, h("span",{style:"flex:1"}, h("b",null,x.name), "　記録 "+x.n+" 件"),
+          h("button",{class:"btn sm", onclick:()=>resDismiss(x.k, false)},"承認待ちに戻す")))))) : null),
     h("section",{class:"sec"}, h("h2",null,"承認済みの社員", h("span",{class:"c"}, Object.keys(list).length+"人")),
       h("div",{class:"log"}, Object.keys(list).length ? Object.keys(list).sort((a,b)=>a.localeCompare(b,"ja")).map(n=>h("div",{class:"e"},
         h("div",{class:"row"}, h("b",{style:"flex:1"},n), h("span",{class:"small muted"},"暗証番号 ••••"),
-          deleteControl("rs:"+n, "外す", ()=>{ const l = {...list}; delete l[n]; resSaveStaff(l); })))) : h("div",{class:"empty"},"まだいません。社員が独立版で記録すると、上の「承認待ち」に出ます。"))));
+          deleteControl("rs:"+n, "外す", async ()=>{ const pin = list[n]?.pin; const l = {...list}; delete l[n]; await resSaveStaff(l); if (pin!=null) await resDismiss(n+"|"+pin, true); })))) : h("div",{class:"empty"},"まだいません。社員が独立版で記録すると、上の「承認待ち」に出ます。"))));
 }
 
 
