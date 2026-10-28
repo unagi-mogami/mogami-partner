@@ -2396,8 +2396,8 @@ function qtText(q, c){
     "\n\n小計（8%対象）"+yen(c.base8)+"　消費税 "+yen(c.tax8)+(c.base10 ? "\n小計（10%対象）"+yen(c.base10)+"　消費税 "+yen(c.tax10) : "")+
     "\n合計（税込）"+yen(c.total)+"\n\n"+CO.name+"　担当："+(recMe()?.name||"")+"\nTEL "+CO.tel+"　FAX "+CO.fax;
 }
-function qtDoc(q, c, appr){
-  const me = recMe(), exp = addDays(q.date, QT_VALID_DAYS);
+function qtDoc(q, c, appr, staff){
+  const me = staff ? {name:staff} : recMe(), exp = addDays(q.date, QT_VALID_DAYS);
   const row = l => [h("tr",null, h("td",null,l.name), h("td",{class:"n"}, num(l.qty,2).replace(/\.?0+$/,"")), h("td",null,l.unit), h("td",{class:"n"}, yen(l.up)), h("td",{class:"n"}, yen(l.amount)), h("td",null,l.rate)),
     (l.parts||[]).map(pt=>h("tr",{class:"part"}, h("td",{colspan:4}, "　"+pt.l), h("td",{class:"n"}, yen(pt.amount)), h("td",null, pt.rate)))];
   return h("div",{class:"qdoc"},
@@ -2420,10 +2420,18 @@ function qtDoc(q, c, appr){
       h("tr",null, h("th",null,"合計（税込）"), h("td",{class:"n"}, h("b",null, yen(c.total))))),
     h("div",{class:"qd-note"}, "備考\n・うなぎ代は軽減税率（8%）対象、加工賃は10%です。\n・白焼の1枚あたりの単価は、うなぎ代と白焼加工賃を合わせた金額です。\n・活鰻は相場により価格が変わるため、有効期限（"+fmtDate(exp)+"）を過ぎた場合は改めてお見積りいたします。"+(q.memo.trim() ? "\n・"+q.memo.trim() : "")));
 }
+function qtSnap(q){
+  const c = qtCalc(q), a = qtApproval(q, c);
+  return {no:q.no, date:q.date, shop:q.shop.trim(), person:q.person.trim(), memo:q.memo.trim(), kg:Math.round(c.totalKg*100)/100,
+    lines:c.lines.map(l=>({name:l.name, qty:l.qty, unit:l.unit, up:l.up, amount:l.amount, rate:l.rate, parts:l.parts})),
+    base8:c.base8, base10:c.base10, tax8:c.tax8, tax10:c.tax10, total:c.total, disc:c.disc.length, appr:!!(a.need && a.ok)};
+}
 function qtRecord(q){
-  if (q.recorded || !recMe()) return;
-  q.recorded = true; qtSave();
-  recAdd({kind:"quote", shop:q.shop.trim(), detail:qtText(q, qtCalc(q)).slice(0,400)});
+  if (!recMe()) return;
+  const snap = qtSnap(q), sig = JSON.stringify(snap);
+  if (q.sentSig===sig) return;            // 同じ内容は二重に送らない
+  q.sentSig = sig; q.recorded = true; qtSave();
+  recAdd({kind:"quote", shop:snap.shop, quote:snap});
 }
 function quoteView(){
   const q = qtGet(), c = qtCalc(q), appr = qtApproval(q, c), me = recMe();
