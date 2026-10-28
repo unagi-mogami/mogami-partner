@@ -1758,6 +1758,27 @@ function pdfSheet(blob, name, title){
       h("button",{class:"btn ghost", type:"button", onclick:close}, "閉じる")));
   document.querySelectorAll(".pdfsheet").forEach(x=>x.remove()); document.body.append(sheet);
 }
+/* claude.ai版（Claudeアプリの中）では、スマホの共有画面を直接は開けない。
+   「ファイルの保存」が許可されていないときは、許可を見直す入口を出す（許可されていれば、保存の確認→共有画面が出る） */
+function pdfBlocked(blob, name, title){
+  const close = () => sheet.remove();
+  const retry = async () => {
+    let pm = null; try { pm = window.claude && window.claude.use ? await claude.use("permissions") : null; } catch(e){}
+    if (!pm){ toast("この画面のメニューにある「権限」で、ファイルの保存をオンにしてください"); return; }
+    try { await pm.manage(); } catch(e){ toast("この画面のメニューにある「権限」で、ファイルの保存をオンにしてください"); return; }
+    let st = "unavailable"; try { st = await pm.state("downloads"); } catch(e){}
+    if (st==="denied" || st==="unavailable"){ toast("ファイルの保存がオフのままです"); return; }
+    if (!S.downloads){ close(); toast("オンにしました。アプリを開き直してから、もう一度「PDFで保存」を押してください"); return; }
+    try { await S.downloads.save({filename:name, data:blob}); close(); toast("PDFを保存しました"); }
+    catch(e){ toast(e && e.code==="declined" ? "保存をやめました" : "保存できませんでした。アプリを開き直してお試しください"); }
+  };
+  const sheet = h("div",{class:"pdfsheet", role:"dialog", "aria-label":"PDFができました"},
+    h("div",{class:"panel stack"}, h("b",null,"PDFはできましたが、まだ送れません"), h("div",{class:"small muted"}, name),
+      h("div",{class:"small"},"この画面では「ファイルの保存」が許可されていないため、共有の画面が出ません。下のボタンでオンにすると、保存の確認のあとに共有の画面（LINEなど）が出ます。"),
+      h("button",{class:"btn primary", type:"button", onclick:retry}, "ファイルの保存をオンにする"),
+      h("button",{class:"btn ghost", type:"button", onclick:close}, "閉じる")));
+  document.querySelectorAll(".pdfsheet").forEach(x=>x.remove()); document.body.append(sheet);
+}
 let pdfBusy = false;
 async function savePdf(custom){
   if (pdfBusy){ toast("PDFを作っています。少しお待ちください"); return; }
@@ -1788,9 +1809,11 @@ async function savePdf(custom){
         const c = e && e.code;
         if (c==="declined") toast("保存をやめました");
         else if (c==="rate_limited") toast("保存の確認画面が開いています。そちらで「保存」を押してください");
+        else if (!canPrintDialog()) pdfBlocked(blob, name, title);
         else pdfSheet(blob, name, title);
       }
     }
+    else if (!canPrintDialog()) pdfBlocked(blob, name, title);
     else pdfSheet(blob, name, title);
     if (custom && custom.after) try { custom.after(); } catch(e){}
   } catch(e){ console.warn(e); toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }

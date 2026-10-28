@@ -63,6 +63,7 @@ RULES = [
 MUST = [
     (r'function flushRender\(', "入力を確定した瞬間に画面を作り直す作りに戻っている（入力直後のボタンが1回目で空振りする）"),
     (r'c===\"declined\"\) toast\(', "PDF保存の確認で「やめる」を押したときに何も表示されない作りに戻っている"),
+    (r'function pdfBlocked\(', "claude.ai版で保存が許可されていない時に、共有できない画面（反応しない「送る」）を出す作りに戻っている"),
 ]
 for pat, msg in MUST:
     if not re.search(pat, src): bad(msg)
