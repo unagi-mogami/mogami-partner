@@ -302,8 +302,27 @@ details.memo>summary{font-size:12px;color:var(--muted);font-weight:500}
 .printval{display:inline-block;min-width:4em;padding:2px 8px;border-bottom:1px solid var(--line);font-weight:700}
 .print-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:14px;font-size:12px}
 .print-head b{font-family:var(--f-display);font-size:16px;letter-spacing:.1em}
+/* 印刷の控えは詰めて、なるべく1ページに収める */
+#print-area{font-size:10.5px;line-height:1.45}
+#print-area .print-head{margin-bottom:8px}
+#print-area h1{font-size:17px} #print-area h2{font-size:13px} #print-area h3{font-size:12px}
+#print-area .pagehead{margin-bottom:4px;gap:4px} #print-area .pagehead p{font-size:10px}
+#print-area .stack{gap:6px} #print-area .panel{padding:7px 10px}
+#print-area .grid2{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px}
+#print-area label.f{font-size:10px;gap:0}
+#print-area .printval{padding:0 4px;min-width:0;font-size:11px}
+#print-area .recs{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#print-area .rec{padding:8px;gap:5px} #print-area .rec h3{font-size:13px}
+#print-area .score b{font-size:24px} #print-area .est{padding:6px 8px} #print-area .est-v{font-size:16px} #print-area .est-s{font-size:11px}
+#print-area .meta{font-size:10px} #print-area .list{font-size:10px} #print-area .pill{font-size:9px;padding:0 6px}
+#print-area .tablewrap{border-radius:4px} #print-area table.t{font-size:10px;min-width:0} #print-area table.t th,#print-area table.t td{padding:3px 6px}
+#print-area .sim{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px} #print-area .sim.one{grid-template-columns:minmax(0,1fr)}
+#print-area .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px} #print-area .kpi{padding:6px 8px} #print-area .kpi .v{font-size:16px}
+#print-area .cmp{gap:6px} #print-area .cmp .b{height:13px;font-size:9px}
+#print-area .formula{font-size:9px;line-height:1.5;padding:6px 8px}
+#print-area .opts{gap:4px} #print-area .opt{min-height:0;padding:4px 8px}
 @media print{
-  @page{margin:12mm}
+  @page{margin:10mm}
   html.printing body>*:not(#print-area){display:none!important}
   html.printing #print-area{display:block}
   html,body{background:#fff!important;color:#000}
@@ -1541,7 +1560,11 @@ function printCopy(){
   c.querySelectorAll('.opt').forEach(o=>{ if (o.getAttribute("aria-pressed")!=="true") o.remove(); });
   [...c.children].forEach(x=>{ if (x.classList && x.classList.contains("banner")) x.remove(); });
   c.querySelectorAll(".btn, .linkbtn, .src, .tabbar, .act, details.memo, .noprint, script, nav, .installbtn").forEach(x=>x.remove());
-  c.querySelectorAll("details").forEach(d=>d.setAttribute("open",""));
+  /* 控えに要らないもの：入力用の枠・点数の内訳・条件外や4位以下の一覧・候補にならない行・補足のヒント */
+  c.querySelectorAll(".shopname, .bd, .hint, details, tr.dim").forEach(x=>x.remove());
+  c.querySelectorAll("#ju-out").forEach(x=>{ const sm = x.closest(".sim"); if (sm) sm.classList.add("one"); });
+  c.querySelectorAll("#order-kg").forEach(x=>{ const pn = x.closest(".panel"); if (pn) pn.remove(); });
+  c.querySelectorAll("tr").forEach(r=>{ if (/原価未登録/.test(r.textContent)) r.remove(); });
   c.querySelectorAll(".tablewrap.stacked").forEach(w=>w.classList.remove("stacked"));
   c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x=>x.removeAttribute("id"));
   const title = (main.querySelector("h1")?.textContent || "MOGAMI PARTNER").trim();
