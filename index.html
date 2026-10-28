@@ -1592,25 +1592,44 @@ function simCompareView(){
   const form = h("div",{class:"panel stack"}, h("div",{class:"eyebrow"},"入力（お客様に確認した数字を入れてください）"));
   if (S.products.length){
     const pk = S.simPick || (S.simPick = simPickDefaults());
-    const ai = simAutoPrice(s, pk);
+    var ai = simAutoPrice(s, pk);
     form.append(h("div",{class:"stack",style:"gap:8px;padding-bottom:12px;border-bottom:1px solid var(--line)"},
       h("div",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"提案するもがみの商品（選ぶと提案価格に自動で入ります）"),
       h("div",{class:"grid2"}, sel(pk,"pid",[["","商品を選択"], ...S.products.map(p=>[p.id,p.name])], ()=>{ s.newPrice.manual = false; const p = S.products.find(x=>x.id===pk.pid); if (p && p.sizes?.length && !p.sizes.includes(s.size.v)) s.size.v = p.sizes[0]; render(); }),
         h("input",{class:"i", id:"sim-pick-kg", type:"number", inputmode:"decimal", placeholder:"1回の発注量（kg）", ...bind(pk,"kg"), onchange:()=>render()})),
       h("div",{class:"small",id:"sim-auto"}, simAutoNote(s, ai))));
   }
+  const af = simAutoFish(s);
   for (const [k,l,u] of SIM_FIELDS){
     const input = k==="size"
       ? h("select",{class:"i", id:"sim-size", value:s.size.v, onchange:e=>{s.size.v=e.target.value; refresh();}}, SIZES.map(x=>h("option",{value:x},x+"（1尾 約"+gOf(x)+"g）")))
-      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", placeholder: k==="newPrice" ? "上で商品を選ぶと自動で入ります" : k==="fishPerMeal" ? "例：0.5（半尾）／1（1尾）" : "お客様に確認して入力", value:s[k].v, oninput:e=>{s[k].v=e.target.value; if (k==="newPrice"){ s.newPrice.manual = true; const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, simAutoPrice(s, S.simPick||{}))); } refresh();}});
+      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", placeholder: k==="newPrice" ? "上で商品を選ぶと自動で入ります" : k==="fishPerMeal" ? "例：0.5（半尾）／1（1尾）" : "お客様に確認して入力", value:s[k].v, oninput:e=>{s[k].v=e.target.value; if (k==="fishPerMeal"){ s.fishPerMeal.manual = true; const fn = document.getElementById("sim-fish-note"); if (fn) fn.replaceChildren(simFishNote(s, simAutoFish(s))||""); }
+      if (k==="newPrice"){ s.newPrice.manual = true; const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, simAutoPrice(s, S.simPick||{}))); } refresh();}});
     const srcBtns = h("div",{class:"src"}, [["act","実績"],["est","推定"]].map(([v,t])=>h("button",{type:"button","aria-pressed":String(s[k].src===v), onclick:e=>{ s[k].src=v; e.currentTarget.parentNode.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", String(b.textContent===t))); refresh(); }},t)));
-    form.append(h("label",{class:"f"}, h("span",null,l, u ? h("span",{class:"hint"}," （"+u+"）") : null), input, srcBtns));
+    form.append(h("label",{class:"f"}, h("span",null,l, u ? h("span",{class:"hint"}," （"+u+"）") : null), input, k==="fishPerMeal" ? h("div",{id:"sim-fish-note"}, simFishNote(s, af)) : null, srcBtns));
   }
   const out = h("div",{id:"sim-out", class:"stack"});
   wrap.append(h("div",{class:"sim"}, form, out));
   refreshInto(out);
   return wrap;
-  function refresh(){ const pk = S.simPick||{}; if (pk.pid && !s.newPrice.manual){ const ai = simAutoPrice(s, pk); const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, ai)); } const o = document.getElementById("sim-out"); if (o) refreshInto(o); }
+  function refresh(){ const pk = S.simPick||{}; if (!s.fishPerMeal.manual){ const fn = document.getElementById("sim-fish-note"); const f2 = simAutoFish(s); if (fn) fn.replaceChildren(simFishNote(s, f2)||""); } if (pk.pid && !s.newPrice.manual){ const ai = simAutoPrice(s, pk); const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, ai)); } const o = document.getElementById("sim-out"); if (o) refreshInto(o); }
+}
+function simAutoFish(s){
+  const j = S.ju; if (!j) return null;
+  let v = null, label = "";
+  if (j.mode==="gram"){
+    const g = toNum(j.gram), P = pOf(s.size.v), p = S.products.find(x=>x.id===(S.simPick||{}).pid);
+    const y = (p ? shiroOf(p, Number(j.month)||thisMonth()) : null) ?? SHIRO_DEFAULT;
+    if (g!=null && P){ v = g / (1000/P * y/100); label = "白焼き"+g+"g（"+s.size.v+"・歩留まり"+num(y,1)+"%で約"+num(v,2)+"尾）"; }
+  } else { v = fishVal(j.fish); label = (FISH.find(f=>f[0]===j.fish)||[,j.fish+"尾"])[1]; }
+  if (v==null) return null;
+  if (!s.fishPerMeal.manual){ s.fishPerMeal = {v:String(Math.round(v*1000)/1000), src:"act"}; const el = document.getElementById("sim-fishPerMeal"); if (el && document.activeElement!==el) el.value = s.fishPerMeal.v; }
+  return {v, label};
+}
+function simFishNote(s, af){
+  if (!af) return null;
+  if (s.fishPerMeal.manual) return h("span",{class:"hint"}, h("span",{class:"pill warn"},"手入力中"), " 原価計算の選択は「"+af.label+"」 ", h("button",{type:"button",class:"linkbtn", onclick:()=>{ s.fishPerMeal.manual = false; render(); }},"原価計算の選択に戻す"));
+  return h("span",{class:"hint"}, h("span",{class:"pill ok"},"自動"), " 原価計算（鰻重）の「1食に使ううなぎ」："+af.label+" を反映");
 }
 function simAutoNote(s, ai){
   if (!ai) return h("span",{class:"muted"},"商品を選ぶと、サイズと発注量に合わせたもがみの販売単価が「提案商品の価格」に入ります。");
