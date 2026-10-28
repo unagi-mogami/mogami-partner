@@ -2110,7 +2110,7 @@ function installNudge(){
 }
 const INSTALL_TEXT = "【MOGAMI アプリの入れ方】\n\n■iPhone\n①一緒に送ったアイコン画像を長押しして保存\n②このリンクを開いて「ショートカットを追加」\n" + SHORTCUT_URL + "\n③ショートカットアプリで「MOGAMI」を長押し→詳細→ホーム画面に追加→アイコンをタップ→写真を選択で①の画像→追加\n\n■Android\nChromeで下のリンクを開き、右上の︙→ホーム画面に追加\n" + APP_URL;
 /* 送るリンクには日付を付ける（LINEの中のブラウザが前に開いた古いページを出さないため） */
-const shareLink = () => { const d = new Date(), p = n => String(n).padStart(2,"0"); return PUBLIC_URL + "?v=" + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()); };
+const shareLink = () => { const d = new Date(), p = n => String(n).padStart(2,"0"); return PUBLIC_URL + "?openExternalBrowser=1&v=" + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()); };
 const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・見積書・営業記録（社員の方だけ。社長から届く社員コードで最初に一度登録）\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
 function stepList(items){ return h("ol",{class:"steplist"}, items.map(x=>h("li",null,x))); }
 function installView(){
@@ -2304,9 +2304,11 @@ function recEntryPanel(){
 }
 /* 見積書・営業記録は、社員として一度登録してから使う（見積書の担当者名・実績の名前になる） */
 function recRegisterView(forQuote){
-  const R = recState(), g = R.reg;
+  const R = recState(), g = R.reg, old = lsGet(REC_ME_KEY, null), again = !!(old && old.name && old.sk!==STAFF_KEY.v);
+  if (again && !g.name) g.name = old.name;
   return h("div",{class:"stack",style:"max-width:520px"},
     h("div",{class:"pagehead"}, h("h1",null, forQuote ? "見積書を出すには社員登録" : "営業記録の登録"), h("p",null, forQuote ? "見積書は、もがみの社員の方が使います。見積書に担当者として名前が入るので、最初に一度だけ登録してください。" : "もがみの社員の方だけが使います。最初に一度だけ登録してください。")),
+    again ? h("div",{class:"banner warn"}, h("div",null, old.name+" さん：見積書・営業記録に社員コードが必要になりました。社長から届いた社員コードを入れて、もう一度登録してください（これまでの記録は消えていません）。")) : null,
     h("form",{class:"panel stack", onsubmit:e=>{ e.preventDefault();
       const name = g.name.trim().replace(/\s+/g," "), pin = String(g.pin).trim();
       if (!name) return toast("名前を入れてください");
@@ -2821,7 +2823,8 @@ async function aprImport(text, quiet){
 }
 /* LINEのリンク（…#apr=…）から開いたとき */
 const APR_FROM_URL = (()=>{ try { const m = location.hash.match(/apr=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/); if (m){ history.replaceState(null,"",location.pathname); return m[1]; } } catch(e){} return null; })();
-if (APR_FROM_URL){ const wait = n => { if (document.querySelector("nav.tabs a") && S.products.length) aprImport("apr="+APR_FROM_URL); else if (n < 60) setTimeout(()=>wait(n+1), 500); }; setTimeout(()=>wait(0), 300); }
+if (APR_FROM_URL){ aprVerify(APR_FROM_URL).then(o=>{ const all = lsGet(QT_APR, {}); all[o.no] = o; lsSet(QT_APR, all); }, ()=>{});   // 合言葉・登録の前でも承認は先に保存しておく
+  const wait = n => { if (document.querySelector("nav.tabs a") && S.products.length) aprImport("apr="+APR_FROM_URL); else if (n < 600) setTimeout(()=>wait(n+1), 500); }; setTimeout(()=>wait(0), 300); }
 function qtReqText(q, c){
   const me = recMe();
   const req = {t:"req", no:q.no, shop:q.shop.trim(), by:me?.name||"", items:c.disc.map(d=>({product:d.product, size:d.size, kind:d.kind, price:d.price, rule:d.rule})), kg:Math.round(c.totalKg*100)/100};
@@ -2916,7 +2919,11 @@ function quoteView(){
       h("div",{class:"small"}, c.disc.map(d=>h("div",null, d.kind==="ship" ? "・運賃をなしにする（標準 "+yen(d.rule)+"/個口）" : d.kind==="extra" ? "・"+d.product+"："+yen(d.rule)+" → "+yen(d.price) : "・"+d.product+" "+d.size+"："+yen(d.rule)+" → "+yen(d.price)+"/kg"))),
       h("div",{class:"small muted"},"社長が承認すると、LINEで承認のリンクが届きます。リンクを開くと、この見積書が出せるようになります。"),
       reqText ? h("div",{class:"row"}, lineButton(reqText, "社長に承認を依頼（LINE）"), copyButton(reqText, "文章をコピー")) : h("div",{class:"banner warn"},"お店の名前と商品をそろえると依頼できます。"),
-      h("details",{class:"x"}, h("summary",null,"社長からの返事を貼り付ける（リンクが開けない時）"),
+      h("div",{class:"stack"}, h("b",{class:"small"},"社長から承認のLINEが届いたら"),
+        h("div",{class:"small muted"},"LINEの文章を長押しでコピーして、このボタンを押してください（リンクを開くと別の画面になり、登録や見積書が見えないことがあります）。"),
+        h("div",null, h("button",{class:"btn primary", onclick:async ()=>{ let t = ""; try { t = await navigator.clipboard.readText(); } catch(e){}
+          if (t) aprImport(t); else { const el = document.getElementById("qt-apr"); if (el){ el.closest("details").open = true; el.focus(); } toast("読み込めませんでした。下の欄に貼り付けてください"); } }},"コピーした承認を読み込む"))),
+      h("details",{class:"x"}, h("summary",null,"うまく読み込めない時（貼り付け）"),
         h("div",{class:"stack"}, h("textarea",{class:"i", id:"qt-apr", placeholder:"社長から届いた文章をそのまま全部貼り付け"}),
           h("div",null, h("button",{class:"btn sm primary", onclick:()=>aprImport(document.getElementById("qt-apr").value)},"読み込む"))))) :
       (appr.need && appr.ok ? h("div",{class:"banner info"}, h("div",null,"値引きは社長の承認済みです。")) : null),
@@ -3021,7 +3028,7 @@ function aprOwnerPanel(){
       const body = jEnc({t:"apr", no:A.req.no, shop:A.req.shop, items:A.req.items.map(x=>({product:x.product, size:x.size, kind:x.kind, price:x.price})), by:"社長", at:nowIso()});
       const sig = b64uEnc(new Uint8Array(await crypto.subtle.sign({name:"ECDSA", hash:"SHA-256"}, key, new TextEncoder().encode(body))));
       const code = body+"."+sig;
-      A.reply = "【値引き承認】見積番号 "+A.req.no+"（"+A.req.shop+"）の値引きを承認しました。\n下のリンクを開くと、見積書が出せるようになります。\n"+PUBLIC_URL+"#apr="+code+"\n\n（リンクが開けない時は、この文章をアプリの「見積書」→「社長からの返事を貼り付ける」に貼ってください）\nMOGAMI-APR:"+code;
+      A.reply = "【値引き承認】見積番号 "+A.req.no+"（"+A.req.shop+"）の値引きを承認しました。\nこの文章をコピーして、アプリの「見積書」→「コピーした承認を読み込む」を押してください。\n（またはリンクを開く）\n"+PUBLIC_URL+"?openExternalBrowser=1#apr="+code+"\n\n（リンクが開けない時は、この文章をアプリの「見積書」→「社長からの返事を貼り付ける」に貼ってください）\nMOGAMI-APR:"+code;
       render();
     } catch(e){ toast("承認できませんでした（"+e.message+"）"); }
   };
