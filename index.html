@@ -166,6 +166,7 @@ input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 .list.ng li::marker{color:var(--red)}
 .list.good li::marker{color:var(--green)}
 .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--sunk);flex:none}
+.rec .thumb{width:88px;height:88px}
 
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 table.t{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
@@ -1066,7 +1067,7 @@ function recCard(r, i){
   const p = r.p; const [sl, sc] = supplyLabel(p);
   return h("article",{class:"rec"+(i===0?" first":"")},
     h("div",{class:"hd"},
-      p.photoId ? h("img",{class:"thumb", src:"/_blob/"+p.photoId, alt:""}) : null,
+      prodImg(p) ? h("img",{class:"thumb", src:prodImg(p), alt:p.name+"の写真", loading:"lazy"}) : null,
       h("div",{style:"min-width:0"}, h("div",{class:"rank"},"第"+(i+1)+"候補"), h("h3",null,p.name), p.demo ? h("span",{class:"pill demo"},"架空データ") : null),
       h("div",{class:"score"}, h("b",null,r.total), h("small",null, r.unknownPts ? "/100・暫定" : "/100"))),
     estimateBox(p),
@@ -1358,7 +1359,16 @@ function deleteControl(key, label, onYes){
 }
 
 /* ============ 商品マスタ ============ */
-function blankProduct(){ return {name:"", origin:"", farm:"", sizes:[], fat:"", oil:"", skin:"", tareFit:"", flesh:"", cookKanto:"", cookKansai:"", cookOther:"", bySize:{}, cost:"", price:"", stock:"", weeklyCap:"", supply:"", quality:"", brand:"", luxury:"", uniform:"", yield:"", sakiYield:"", shiroYield:"", domestic:null, notes:"", photoId:"", demo:false}; }
+/* 商品写真：スマホの写真を小さくして商品データに入れる（独立版にも届くように、ファイル置き場は使わない） */
+const prodImg = p => p && p.img ? p.img : (p && p.photoId && !STANDALONE ? "/_blob/"+p.photoId : null);
+function shrinkImg(file, max, q){
+  return new Promise((ok, ng)=>{ const u = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { try { const r = Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight)), w = Math.round(im.naturalWidth*r), hh = Math.round(im.naturalHeight*r);
+      const c = document.createElement("canvas"); c.width = w; c.height = hh; const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0,0,w,hh); x.drawImage(im, 0, 0, w, hh);
+      URL.revokeObjectURL(u); ok(c.toDataURL("image/jpeg", q)); } catch(e){ ng(e); } };
+    im.onerror = () => { URL.revokeObjectURL(u); ng(new Error("画像を読めません")); }; im.src = u; });
+}
+function blankProduct(){ return {img:"", name:"", origin:"", farm:"", sizes:[], fat:"", oil:"", skin:"", tareFit:"", flesh:"", cookKanto:"", cookKansai:"", cookOther:"", bySize:{}, cost:"", price:"", stock:"", weeklyCap:"", supply:"", quality:"", brand:"", luxury:"", uniform:"", yield:"", sakiYield:"", shiroYield:"", domestic:null, notes:"", photoId:"", demo:false}; }
 function productsView(){
   if (S.prodEdit) return productForm();
   if (S.exDraft) return h("div",{class:"stack"}, extrasEditor());
@@ -1483,12 +1493,14 @@ function productForm(){
   wrap.append(h("div",{class:"pagehead"}, h("button",{class:"btn ghost sm", onclick:()=>{S.prodEdit=null; S.prodDraft=null; S.dupFrom=null; S.confirm=null; render();}},"← 一覧へ"),
     h("h1",{style:"flex-basis:100%"}, isNew ? "商品の登録" : "商品の編集"), h("p",null,"わからない項目は空欄のままで構いません。推薦結果に「要確認」と表示され、点数は補完しません。")));
   const photo = h("div",{class:"row"},
-    d.photoId ? h("img",{class:"thumb", src:"/_blob/"+d.photoId, alt:"商品写真"}) : h("div",{class:"thumb"}),
-    S.assets ? h("label",{class:"btn sm"}, "写真を選ぶ", h("input",{type:"file", accept:"image/*", hidden:true, onchange:async e=>{
+    prodImg(d) ? h("img",{class:"thumb", src:prodImg(d), alt:"商品写真"}) : h("div",{class:"thumb"}),
+    h("label",{class:"btn sm"}, prodImg(d) ? "写真を変える" : "写真を選ぶ", h("input",{type:"file", accept:"image/*", hidden:true, onchange:async e=>{
       const f = e.target.files[0]; if (!f) return;
-      try { const r = await S.assets.upload(f); d.photoId = r.id; toast("写真をアップロードしました"); render(); } catch(err){ toast("写真をアップロードできませんでした"); }
-    }})) : h("span",{class:"small muted"},"写真の登録は編集者権限で利用できます"),
-    d.photoId ? h("button",{class:"btn sm ghost", onclick:()=>{d.photoId=""; render();}},"写真を外す") : null);
+      try { let u = await shrinkImg(f, 480, 0.75); if (u.length > 90000) u = await shrinkImg(f, 360, 0.65);
+        d.img = u; d.photoId = ""; toast("写真を入れました。「保存する」で登録されます"); render(); } catch(err){ toast("写真を読み込めませんでした（別の写真で試してください）"); }
+    }})),
+    prodImg(d) ? h("button",{class:"btn sm ghost", onclick:()=>{ d.img = ""; d.photoId = ""; render(); }},"写真を外す") : null,
+    h("span",{class:"small muted", style:"flex-basis:100%"},"診断の結果（おすすめ）に表示されます。社員・お取引先のアプリには、次の自動更新で届きます。"));
   wrap.append(h("div",{class:"panel stack"},
     h("div",{class:"grid2"}, field("商品名", t("name","例：鹿児島 大隅産 活鰻")), field("産地", t("origin","例：鹿児島県"))),
     h("div",{class:"f"}, h("span",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"サイズ規格（複数可）"),
@@ -1534,7 +1546,7 @@ async function saveProduct(){
     price:toNum(d.price), weeklyCap:toNum(d.weeklyCap), supply:toNum(d.supply), quality:toNum(d.quality),
     brand:toNum(d.brand), luxury:toNum(d.luxury), uniform:toNum(d.uniform), yield:toNum(d.yield), sakiYield:toNum(d.sakiYield), shiroYield:toNum(d.shiroYield),
     seasonYield:(d.seasonYield||[]).filter(e=>(e.months||[]).length && (isNum(e.saki)||isNum(e.shiro))).map(e=>({label:(e.label||"").trim(), months:[...e.months].map(Number).sort((a,b)=>a-b), saki:toNum(e.saki), shiro:toNum(e.shiro)})), domestic: typeof d.domestic==="boolean" ? d.domestic : null,
-    notes:(d.notes||"").trim(), photoId:d.photoId||"", demo:!!d.demo, v:2, updatedAt:nowIso(), updatedBy:S.uid
+    notes:(d.notes||"").trim(), photoId:d.photoId||"", img:d.img||"", demo:!!d.demo, v:2, updatedAt:nowIso(), updatedBy:S.uid
   };
   const ref = S.prodEdit==="new" ? S.db.collection("products").doc() : S.db.doc("products/"+S.prodEdit);
   if (await write(()=>ref.set(body), "保存しました")){ S.prodEdit=null; S.prodDraft=null; S.dupFrom=null; render(); }
@@ -1998,7 +2010,8 @@ function buildSnapshot(){
       brand:p.brand??null, luxury:p.luxury??null, uniform:p.uniform??null, domestic: d===1 ? true : d===0 ? false : null,
       sakiYield:p.sakiYield??null, shiroYield:p.shiroYield??null, seasonYield:p.seasonYield||[], weeklyCap:p.weeklyCap??null, v:2,
       bySize:Object.fromEntries(sizes.map(s=>[s,{avail:sizeAvail(p,s)}])),
-      _sell:Object.fromEntries(sizes.map(s=>[s, T.map(t=>{ const q = quote(sizeCost(p,s), t); return q ? {lo:q.lo, hi:q.hi} : null; })]))};
+      _sell:Object.fromEntries(sizes.map(s=>[s, T.map(t=>{ const q = quote(sizeCost(p,s), t); return q ? {lo:q.lo, hi:q.hi} : null; })])),
+      ...(p.img ? {img:p.img} : {})};
   });
   const P = getPricing();
   return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax, cat:extraCat(x)})), ship:getShip()}};
