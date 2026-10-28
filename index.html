@@ -2233,6 +2233,7 @@ function recordView(){
       field("お店の名前", h("input",{class:"i shopname", id:"rec-shop", list:"rec-shops", placeholder:"例：うなぎ処 ○○", ...bind(R,"shop")}), shops.length ? "前に記録したお店は候補に出ます" : null),
       h("datalist",{id:"rec-shops"}, shops.map(x=>h("option",{value:x}))),
       h("div",{class:"seg", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
+      R.kind==="quote" && !R.detail ? h("div",{class:"banner info"}, h("div",null,"お客様に渡す見積書を作るなら「見積書」タブへ。見積書を送ると、ここに自動で記録されます。 ", h("button",{class:"btn sm", onclick:()=>{ if (R.shop && !qtGet().shop) qtGet().shop = R.shop; go("quote"); }},"見積書を作る"))) : null,
       R.kind==="sample" ? field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])) : null,
       R.kind==="deal" ? h("div",{class:"grid2"},
         field("成約した商品", sel(R,"product",[["","選んでください"], ...prodNames.map(n=>[n,n])])),
