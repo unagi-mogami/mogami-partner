@@ -3,7 +3,8 @@
 独立版（index.html）の不具合チェック。自動更新（商品データ同期）のあと、push する前に必ず実行する。
 
 使い方:
-  MOGAMI_PASS='今の合言葉' python3 tools/check.py [index.html]
+  MOGAMI_MASTER='親鍵' python3 tools/check.py [index.html]   （今月の合言葉を親鍵から計算）
+  MOGAMI_PASS='今の合言葉' python3 tools/check.py [index.html]   （合言葉を直接渡す場合。両方あれば両方試す）
 
 出力:
   最後の行が "CHECK_OK" なら問題なし。
@@ -61,6 +62,17 @@ if not any(re.search(p, src) for p, _ in RULES): ok("再発チェック")
 
 # 4. ブラウザで実際に動かす
 PASS = os.environ.get("MOGAMI_PASS", "")
+# 親鍵（MOGAMI_MASTER）があれば、ページに書かれた月の合言葉を sync.js と同じ方法で計算する（合言葉を直接渡さなくてよい）
+_MASTER = os.environ.get("MOGAMI_MASTER", "")
+if _MASTER and m:
+    try:
+        import hmac, hashlib
+        _period = json.loads(m.group(1)).get("period")
+        if _period:
+            _ab = "abcdefghjkmnpqrstuvwxyz23456789"; _h = hmac.new(_MASTER.encode(), ("mogami-pass:" + _period).encode(), hashlib.sha256).digest()
+            _p = "".join(_ab[_h[i] % len(_ab)] + ("-" if i % 4 == 3 and i < 11 else "") for i in range(12))
+            PASS_CANDIDATES = [_p] + ([PASS] if PASS else [])
+    except Exception: pass
 try:
     from playwright.sync_api import sync_playwright
 except Exception:
@@ -103,9 +115,14 @@ if sync_playwright:
             except Exception:
                 bad("%s：「LINEで送る」を押してもLINEが開かない" % where); return False
 
-        pg.goto(base + ("#k=" + urllib.parse.quote(PASS) if PASS else ""))
+        opened = False
+        for _pw in (globals().get("PASS_CANDIDATES") or [PASS]):
+            pg.goto("about:blank"); pg.goto(base + ("#k=" + urllib.parse.quote(_pw) if _pw else ""))
+            try: pg.wait_for_selector("nav.tabs a", timeout=12000); opened = True; break
+            except Exception: pass
         try:
-            pg.wait_for_selector("nav.tabs a", timeout=15000); ok("合言葉で開けた")
+            if not opened: raise Exception("gate")
+            ok("合言葉で開けた")
         except Exception:
             bad("アプリが開かない（合言葉が違う／表示が止まっている）" + ("" if PASS else "。MOGAMI_PASS が未指定"))
         else:
