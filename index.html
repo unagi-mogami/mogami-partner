@@ -351,12 +351,12 @@ const PERM_LABELS = {
   prodView:"商品マスタ閲覧", prodEdit:"商品マスタ編集", stockEdit:"在庫数量の更新", sim:"原価試算", weights:"配点設定", pricing:"発注量別の価格設定", costView:"仕入原価・粗利の閲覧", staff:"社員管理"
 };
 const PERMS = {
-  guest:   ["diag","sim"],
-  admin:   ["diag","custView","custEdit","logAdd","prodView","prodEdit","stockEdit","sim","weights","pricing","costView","staff"],
-  sales:   ["diag","custView","custEdit","logAdd","prodView","sim"],
-  order:   ["diag","custView","custEdit","logAdd","prodView","stockEdit","sim"],
-  floor:   ["custView","logAdd","prodView","stockEdit"],
-  delivery:["custView","logAdd","prodView"]
+  guest:   ["diag","sim","rec"],
+  admin:   ["diag","custView","custEdit","logAdd","prodView","prodEdit","stockEdit","sim","weights","pricing","costView","staff","rec"],
+  sales:   ["diag","custView","custEdit","logAdd","prodView","sim","rec"],
+  order:   ["diag","custView","custEdit","logAdd","prodView","stockEdit","sim","rec"],
+  floor:   ["custView","logAdd","prodView","stockEdit","rec"],
+  delivery:["custView","logAdd","prodView","rec"]
 };
 const COOK = {kanto:"関東風（蒸しあり）", kansai:"関西風（蒸しなし）", other:"その他"};
 /* 味・皮・身質は1〜5の5段階（1が左端、5が右端） */
@@ -424,6 +424,7 @@ const ROUTES = [
   {id:"customers", k:"客", l:"顧客カルテ", need:"custView"},
   {id:"products", k:"品", l:"商品マスタ", need:"prodView"},
   {id:"simulator", k:"算", l:"原価試算", need:"sim"},
+  {id:"record", k:"録", l:"営業記録", need:"rec", hidden:()=>!recMe()},
   {id:"staff", k:"員", l:"社員", need:"staff"},
   {id:"share", k:"共", l:"共有", need:"*"},
   {id:"install", k:"置", l:"ホーム画面", need:"*", hidden:true}
@@ -486,7 +487,7 @@ function renderChrome(){
   const r = role();
   const who = document.getElementById("who");
   who.replaceChildren(...[isMobile() && !isStandalone() ? h("button",{class:"installbtn", onclick:()=>go("install")},"ホーム画面に追加") : null, r ? h("span",{class:"nm"}, S.isOwner ? (S.myStaff?.name || "社長") : (S.myStaff?.name || "")) : null, r ? h("span",{class:"role"}, r==="guest" ? GUEST_LABEL : ROLES[r]) : null].filter(Boolean));
-  const items = ROUTES.filter(x => r && !x.hidden && (x.need==="*" || (PERMS[r]||[]).includes(x.need)));
+  const items = ROUTES.filter(x => r && !(typeof x.hidden==="function" ? x.hidden() : x.hidden) && (x.need==="*" || (PERMS[r]||[]).includes(x.need)));
   const mk = x => h("a",{href:"#"+x.id, "aria-current": S.route===x.id ? "page" : null, onclick:e=>{e.preventDefault(); go(x.id);}}, h("span",{class:"k","aria-hidden":"true"},x.k), h("span",null,x.l));
   document.getElementById("side").replaceChildren(...items.map(mk), h("div",{class:"foot"}, "白・墨・深緑 / 試作版 v0.1"));
   document.getElementById("tabs").replaceChildren(...items.map(mk));
@@ -526,7 +527,7 @@ function render(){
   else {
     const allowed = ROUTES.find(x=>x.id===S.route && can(x.need)) ? S.route : (ROUTES.find(x=>can(x.need))||{}).id;
     S.route = allowed;
-    view = ({diagnose:diagnoseView, customers:customersView, products:productsView, simulator:simulatorView, staff:staffView, share:shareView, install:installView}[allowed] || (()=>h("div")))();
+    view = ({diagnose:diagnoseView, customers:customersView, products:productsView, simulator:simulatorView, record:recordView, staff:staffView, share:shareView, install:installView}[allowed] || (()=>h("div")))();
   }
   const top = role()==="guest"
     ? h("div",{class:"banner info",style:"margin-bottom:14px"}, h("div",null, "ログインなしで使える「診断」と「原価計算」です。商品データは "+(PUB?.builtAt ? localDate(PUB.builtAt) : "—")+" 時点のものです。"+(STANDALONE ? "お店の情報は、結果画面の「社長にLINEで送る」で顧客カルテに登録できます。" : "記録の保存や顧客カルテは、社員としてログインすると使えます。")))
@@ -1652,7 +1653,8 @@ function quickSend(){
     h("b",{style:"flex:1 1 7em"},"お客様に送る"),
     h("a",{class:"btn line sm", href:"https://line.me/R/share", target:"_blank", rel:"noopener", onclick:e=>{ const t = currentSendText(); if (!t){ e.preventDefault(); return notYet(); } e.currentTarget.href = lineUrl(t); lineBackupCopy(t); }},
       h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "LINEで送る"),
-    h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"));
+    h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"),
+    recMe() ? h("button",{class:"btn sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); recFromScreen(t); }}, "営業記録に残す") : null);
 }
 function sendBox(title, text){
   return h("div",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,title), h("div",{class:"small muted"},"お店側の数字だけを文章にします（もがみの仕入原価・利益は入りません）。")),
@@ -1871,7 +1873,7 @@ function guestify(){
   S.products = (PUB.products||[]).map(x=>({...x}));
   S.pricing = {targetMargin:20, maxKg:PUB.pricing?.maxKg ?? 20, tiers:(PUB.pricing?.tiers||DEFAULT_PRICING.tiers).map(t=>({from:t.from, to:t.to, low:0, high:0}))};
   S.weights = PUB.weights || null;
-  if (!["diagnose","simulator"].includes(S.route)) S.route = "diagnose";
+  if (!["diagnose","simulator","record","share"].includes(S.route)) S.route = "diagnose";
   return true;
 }
 /* 仕入原価・上乗せ額・顧客情報・特記事項は入れない。販売単価は発注量の段階ごとに計算済みの値だけ */
@@ -2055,7 +2057,7 @@ function installView(){
 /* ============ 共有・ホーム画面 ============ */
 function shareView(){
   const invite = STANDALONE_INSTALL_TEXT();
-  return h("div",{class:"stack"},
+  return h("div",{class:"stack"}, recEntryPanel(),
     h("div",{class:"pagehead"}, h("h1",null,"共有"), h("p",null,"社員・お客様にアプリを送る方法です。")),
     h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"LINEでアプリを送る"),
       h("div",{class:"formula",style:"white-space:pre-wrap"}, invite),
@@ -2078,6 +2080,145 @@ function backupPanel(){
         toast("バックアップを保存しました");
       } catch(e){ if (e && e.code==="declined") return; toast("保存できませんでした。もう一度お試しください"); }
     }},"バックアップを保存")));
+}
+
+
+/* ============ 営業記録（ログインなしでも、名前＋暗証番号で積み上げる） ============ */
+/* 独立版：Googleフォーム（社長のスプレッドシート）へ送る。claude.ai版でログイン中：データベース records に保存。
+   集計（社員別の件数・粗利）は社長の実績画面で行う。送るのは件数の元になる事実だけで、仕入原価は送らない。 */
+const REC_FORM = "https://docs.google.com/forms/d/e/1FAIpQLScfU34FYLes3ThWx6U-yBZSgHFdPB4lSQLm2MQqi3m-JCmCUA/formResponse";
+const REC_ENTRY = "entry.1301070373";
+const REC_KINDS = [["visit","訪問"],["diag","診断"],["quote","見積"],["sample","サンプル提供"],["deal","成約"]];
+const REC_LABEL = Object.fromEntries(REC_KINDS);
+const REC_ME_KEY = "mogami.rec.me", REC_Q_KEY = "mogami.rec.queue", REC_LOG_KEY = "mogami.rec.log";
+function lsGet(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
+const recDb = () => !!(S.db && S.uid && !S.guest && role());
+/* 記録する人：ログイン中はその社員、独立版は端末に登録した名前 */
+function recMe(){
+  if (recDb()) return {name: S.myStaff?.name || (S.isOwner ? "社長" : "社員"), uid: S.uid};
+  const m = lsGet(REC_ME_KEY, null);
+  return m && m.name && m.pin ? m : null;
+}
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", reg:{name:"", pin:""}, busy:false});
+const ymKey = iso => String(iso||"").slice(0,7);
+async function recPost(rec){
+  if (recDb() && rec.uid){ await S.db.collection("records").doc(rec.id).set(rec); return; }
+  const body = new URLSearchParams(); body.set(REC_ENTRY, JSON.stringify(rec));
+  /* Googleフォームは返事を読めない（no-cors）。通信できれば届いたとみなし、通信エラーなら端末に残して後で送り直す */
+  await fetch(REC_FORM, {method:"POST", mode:"no-cors", body});
+}
+let recFlushing = false;
+async function recFlush(){
+  if (recFlushing) return; recFlushing = true;
+  try {
+    let q = lsGet(REC_Q_KEY, []);
+    while (q.length){
+      try { await recPost(q[0]); } catch(e){ break; }
+      const log = lsGet(REC_LOG_KEY, []); log.unshift(q[0]); lsSet(REC_LOG_KEY, log.slice(0,300));
+      q = lsGet(REC_Q_KEY, []).filter(x=>x.id!==q[0].id); lsSet(REC_Q_KEY, q);
+    }
+  } finally { recFlushing = false; if (S.route==="record") scheduleRender(); }
+}
+try { window.addEventListener("online", ()=>recFlush()); setTimeout(()=>recFlush(), 1500); } catch(e){}
+async function recAdd(fields){
+  const me = recMe(); if (!me) return false;
+  const rec = {v:1, id:rid()+rid(), at:nowIso(), date:today(), name:me.name, src: recDb() ? "app" : "standalone", ...fields};
+  if (me.pin) rec.pin = me.pin; if (me.uid) rec.uid = me.uid;
+  const q = lsGet(REC_Q_KEY, []); q.push(rec);
+  if (!lsSet(REC_Q_KEY, q)){ try { await recPost(rec); } catch(e){ toast("記録を送れませんでした。電波の良い所でもう一度押してください"); return false; } }
+  await recFlush();
+  return rec;
+}
+function recFromScreen(sendText){
+  const R = recState();
+  R.kind = S.route==="diagnose" ? "diag" : "quote";
+  R.detail = String(sendText||"").slice(0,400);
+  if (!R.shop) R.shop = (S.diag.shop?.name||"").trim();
+  go("record");
+}
+function recMyLog(){
+  const me = recMe(); if (!me) return [];
+  const all = [...lsGet(REC_Q_KEY, []).map(x=>({...x, unsent:true})), ...lsGet(REC_LOG_KEY, [])];
+  const cancelled = new Set(all.filter(x=>x.kind==="cancel").map(x=>x.ref));
+  return all.filter(x=>x.name===me.name && x.kind!=="cancel" && !cancelled.has(x.id));
+}
+function recEntryPanel(){
+  if (!STANDALONE && !S.guest) return null;
+  const me = recMe();
+  return h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社員の方へ：営業記録"),
+    h("p",{class:"small",style:"margin:0"}, me ? me.name+" さんとして記録できます。" : "名前と暗証番号を一度登録すると、訪問・診断・見積・サンプル提供・成約を記録できます（お取引先さまは使いません）。"),
+    h("div",{class:"row"}, h("button",{class:"btn primary", onclick:()=>go("record")}, me ? "営業記録を開く" : "社員として登録する")));
+}
+function recRegisterView(){
+  const R = recState(), g = R.reg;
+  return h("div",{class:"stack",style:"max-width:520px"},
+    h("div",{class:"pagehead"}, h("h1",null,"営業記録の登録"), h("p",null,"もがみの社員の方だけが使います。最初に一度だけ登録してください。")),
+    h("form",{class:"panel stack", onsubmit:e=>{ e.preventDefault();
+      const name = g.name.trim().replace(/\s+/g," "), pin = String(g.pin).trim();
+      if (!name) return toast("名前を入れてください");
+      if (!/^\d{4}$/.test(pin)) return toast("暗証番号は数字4けたで入れてください");
+      if (!lsSet(REC_ME_KEY, {name, pin})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
+      R.reg = {name:"", pin:""}; toast(name+" さんで登録しました"); render(); }},
+      field("名前（フルネーム）", h("input",{class:"i", id:"rec-name", autocomplete:"name", placeholder:"例：山田 太郎", ...bind(g,"name")}), "社長が実績を見るときの名前です。毎回同じ名前にしてください。"),
+      field("暗証番号（数字4けた）", h("input",{class:"i", id:"rec-pin", type:"password", inputmode:"numeric", maxlength:4, autocomplete:"off", placeholder:"••••", ...bind(g,"pin")}), "社長から伝えられた番号。ほかの人があなたの名前で記録できないようにするためのものです。"),
+      h("div",null, h("button",{class:"btn primary", type:"submit"},"登録する"))),
+    h("p",{class:"small muted"},"登録内容はこの端末にだけ保存されます。機種変更したら、もう一度登録してください。"));
+}
+function recordView(){
+  const me = recMe();
+  if (!me) return recRegisterView();
+  const R = recState(), log = recMyLog(), ym = ymKey(nowIso());
+  const month = log.filter(x=>ymKey(x.at)===ym);
+  const unsent = lsGet(REC_Q_KEY, []).length;
+  const shops = [...new Set(log.map(x=>x.shop).filter(Boolean))].slice(0,30);
+  const prodNames = (S.products||[]).map(p=>p.name);
+  const send = async () => {
+    if (R.busy) return;
+    if (!R.kind) return toast("記録する内容を選んでください");
+    if (!R.shop.trim()) return toast("お店の名前を入れてください");
+    const f = {kind:R.kind, shop:R.shop.trim().replace(/\s+/g," "), memo:R.memo.trim()};
+    if (R.detail && (R.kind==="diag" || R.kind==="quote")) f.detail = R.detail;
+    if (R.kind==="sample" && R.product) f.product = R.product;
+    if (R.kind==="deal"){
+      if (!R.product) return toast("成約した商品を選んでください");
+      if (!isNum(R.kg) || Number(R.kg)<=0) return toast("1回の数量（kg）を入れてください");
+      if (!isNum(R.price) || Number(R.price)<=0) return toast("販売単価（円/kg）を入れてください");
+      Object.assign(f, {product:R.product, kg:Number(R.kg), price:Number(R.price), newDeal:R.newDeal==="新規"});
+    }
+    R.busy = true; render();
+    const rec = await recAdd(f);
+    R.busy = false;
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", kg:"", price:"", detail:"", newDeal:"新規"}); }
+    render();
+  };
+  const undo = async x => { if (await recAdd({kind:"cancel", ref:x.id, shop:x.shop})){ toast("取り消しました"); render(); } };
+  return h("div",{class:"stack"},
+    h("div",{class:"pagehead"}, h("h1",null,"営業記録"), h("p",null, me.name+" さん　／　今日 "+fmtDate(today()))),
+    unsent ? h("div",{class:"banner warn"}, h("div",null,"まだ送れていない記録が "+unsent+" 件あります。電波の良い所で自動で送ります。 ", h("button",{class:"btn sm", onclick:()=>recFlush().then(()=>render())},"今すぐ送る"))) : null,
+    h("div",{class:"kpis"}, REC_KINDS.map(([k,l])=>h("div",{class:"kpi"}, h("div",{class:"l"},"今月の"+l), h("div",{class:"v"}, String(month.filter(x=>x.kind===k).length)), h("div",{class:"d muted"},"件")))),
+    h("section",{class:"panel stack"},
+      h("h2",{style:"font-size:18px"},"記録する"),
+      field("お店の名前", h("input",{class:"i shopname", id:"rec-shop", list:"rec-shops", placeholder:"例：うなぎ処 ○○", ...bind(R,"shop")}), shops.length ? "前に記録したお店は候補に出ます" : null),
+      h("datalist",{id:"rec-shops"}, shops.map(x=>h("option",{value:x}))),
+      h("div",{class:"seg", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
+      R.kind==="sample" ? field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])) : null,
+      R.kind==="deal" ? h("div",{class:"grid2"},
+        field("成約した商品", sel(R,"product",[["","選んでください"], ...prodNames.map(n=>[n,n])])),
+        field("1回の数量（kg）", h("input",{class:"i", id:"rec-kg", type:"number", inputmode:"decimal", min:0, placeholder:"例：10", ...bind(R,"kg","num")})),
+        field("販売単価（円/kg・税抜）", h("input",{class:"i", id:"rec-price", type:"number", inputmode:"numeric", min:0, placeholder:"例：4300", ...bind(R,"price","num")})),
+        field("新規・既存", sel(R,"newDeal",[["新規","新規のお店（初めての取引）"],["既存","既存のお店（新しい商品の採用）"]]))) : null,
+      (R.kind==="diag" || R.kind==="quote") && R.detail ? h("details",{class:"x"}, h("summary",null,"記録する内容（画面から取り込み済み）"), h("div",{class:"formula",style:"white-space:pre-wrap"}, R.detail)) : null,
+      field("メモ（任意）", h("input",{class:"i", id:"rec-memo", placeholder:"例：店主不在、来週再訪", ...bind(R,"memo")})),
+      h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy ? "送っています…" : "記録する"))),
+    h("section",{class:"sec"}, h("h2",null,"最近の記録", h("span",{class:"c"},"この端末から送った分")),
+      h("div",{class:"log"}, log.length ? log.slice(0,30).map(x=>h("div",{class:"e"},
+        h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null,
+          x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
+        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : ""), x.memo ? h("div",{class:"small muted"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+    STANDALONE || S.guest ? h("details",{class:"x"}, h("summary",null,"名前・暗証番号を変える"),
+      h("div",{class:"panel stack"}, h("p",{class:"small",style:"margin:0"},"登録を消して、もう一度登録します。送った記録は消えません。"),
+        h("div",null, h("button",{class:"btn danger sm", onclick:()=>{ try { localStorage.removeItem(REC_ME_KEY); } catch(e){} render(); }},"登録をやり直す")))) : null);
 }
 
 /* ============ 起動 ============ */

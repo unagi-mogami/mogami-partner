@@ -18,6 +18,7 @@
      - 下のタブを全部押して、エラーが出ないか・画面が空にならないか
      - うなぎ診断を最後まで進めて、結果が出るか
      - 診断結果と原価計算の「LINEで送る」を押して、LINEの送信画面が文章つきで開くか
+     - 営業記録：社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
 import json, os, re, subprocess, sys, tempfile, threading, http.server, functools, urllib.parse
@@ -71,7 +72,7 @@ if sync_playwright:
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = "http://127.0.0.1:%d/%s" % (srv.server_port, os.path.basename(PAGE))
-    errors = []
+    errors = []; sent = []
     with sync_playwright() as p:
         b = p.chromium.launch()
         ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, locale="ja-JP")
@@ -79,6 +80,8 @@ if sync_playwright:
             u = rt.request.url
             if u.startswith("http://127.0.0.1"): return rt.continue_()
             if u.startswith("https://line.me/"): return rt.fulfill(status=200, content_type="text/html", body="<p>LINE</p>")
+            if "/formResponse" in u:  # 営業記録の送信は本物のフォームに届けず、ここで受け取って中身だけ確かめる
+                sent.append(rt.request.post_data or ""); return rt.fulfill(status=200, body="ok")
             return rt.abort()  # フォントなど外部は読まない（オフラインでも判定できるように）
         ctx.route("**/*", route)
         pg = ctx.new_page()
@@ -142,6 +145,37 @@ if sync_playwright:
                         else: ok("原価計算（結果なし時の案内）")
                 for i in range(pg.locator("main a.btn.line:not(.sm)").count()):
                     line_popup(pg.locator("main a.btn.line:not(.sm)").nth(i), "原価計算（下のボタン%d）" % (i + 1))
+            # 営業記録（社員登録 → 訪問を1件記録 → フォームへの送信内容を確認。本物には送らない）
+            share = [h for h, l in tabs if h == "#share"]
+            if share:
+                pg.click('nav.tabs a[href="#share"]'); pg.wait_for_timeout(300)
+                entry = pg.locator("main button", has_text=re.compile("社員として登録|営業記録を開く"))
+                if not entry.count(): bad("共有画面に「営業記録」の入口がない")
+                else:
+                    entry.first.click(); pg.wait_for_timeout(300)
+                    pg.fill("#rec-name", "チェック 太郎"); pg.fill("#rec-pin", "0000")
+                    pg.locator("main button[type=submit]").first.click(); pg.wait_for_timeout(400)
+                    if not pg.locator('nav.tabs a[href="#record"]').count(): bad("営業記録：登録しても「営業記録」タブが出ない")
+                    else:
+                        ok("営業記録：社員登録")
+                        pg.fill("#rec-shop", "チェック用の店")
+                        pg.locator("main .seg button", has_text="訪問").first.click(); pg.wait_for_timeout(200)
+                        pg.locator("main button", has_text="記録する").first.click(); pg.wait_for_timeout(1500)
+                        recs = []
+                        for body in sent:
+                            for k, v in urllib.parse.parse_qsl(body):
+                                if k.startswith("entry."):
+                                    try: recs.append(json.loads(v))
+                                    except Exception: pass
+                        r0 = recs[-1] if recs else None
+                        if not r0: bad("営業記録：「記録する」を押してもフォームに送られない")
+                        elif not (r0.get("kind") == "visit" and r0.get("name") == "チェック 太郎" and r0.get("pin") == "0000" and r0.get("shop") == "チェック用の店" and r0.get("id")):
+                            bad("営業記録：送った中身が足りない（%s）" % json.dumps(r0, ensure_ascii=False)[:120])
+                        elif any(k in json.dumps(r0, ensure_ascii=False) for k in ("cost", "原価")):
+                            bad("営業記録：送る中身に原価が入っている")
+                        else:
+                            ok("営業記録：訪問を記録して送信")
+                            if "まだ送れていない" in pg.inner_text("main"): bad("営業記録：送ったのに「未送信」のまま")
             if errors and not any("エラー" in x for x in problems):
                 bad("画面でエラーが出ている: " + errors[0][:160])
         b.close()
