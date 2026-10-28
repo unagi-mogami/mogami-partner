@@ -1417,7 +1417,7 @@ function weightsPanel(){
 
 /* ============ 原価・利益シミュレーター ============ */
 function simDefaults(){ return {
-  curPrice:{v:"5200",src:"act"}, newPrice:{v:"4800",src:"est"}, monthlyKg:{v:"300",src:"act"}, size:{v:"4P",src:"act"},
+  curPrice:{v:"",src:"act"}, newPrice:{v:"4800",src:"est"}, monthlyKg:{v:"300",src:"act"}, size:{v:"4P",src:"act"},
   fishPerMeal:{v:"0.5",src:"act"}, sellPrice:{v:"4200",src:"act"}, meals:{v:"2000",src:"est"} }; }
 const SIM_FIELDS = [
   ["curPrice","現在の仕入れ価格","円/kg・税抜"],["newPrice","提案商品の価格","円/kg・税抜"],["monthlyKg","月間仕入れ数量","kg"],
@@ -1602,7 +1602,7 @@ function simCompareView(){
   for (const [k,l,u] of SIM_FIELDS){
     const input = k==="size"
       ? h("select",{class:"i", id:"sim-size", value:s.size.v, onchange:e=>{s.size.v=e.target.value; refresh();}}, SIZES.map(x=>h("option",{value:x},x+"（1尾 約"+gOf(x)+"g）")))
-      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", value:s[k].v, oninput:e=>{s[k].v=e.target.value; if (k==="newPrice"){ s.newPrice.manual = true; const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, simAutoPrice(s, S.simPick||{}))); } refresh();}});
+      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", placeholder: k==="curPrice" ? "お客様に確認して入力" : null, value:s[k].v, oninput:e=>{s[k].v=e.target.value; if (k==="newPrice"){ s.newPrice.manual = true; const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, simAutoPrice(s, S.simPick||{}))); } refresh();}});
     const srcBtns = h("div",{class:"src"}, [["act","実績"],["est","推定"]].map(([v,t])=>h("button",{type:"button","aria-pressed":String(s[k].src===v), onclick:e=>{ s[k].src=v; e.currentTarget.parentNode.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", String(b.textContent===t))); refresh(); }},t)));
     form.append(h("label",{class:"f"}, h("span",null,l, u ? h("span",{class:"hint"}," （"+u+"）") : null), input, srcBtns));
   }
