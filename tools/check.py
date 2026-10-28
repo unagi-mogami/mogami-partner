@@ -18,6 +18,7 @@
      - 下のタブを全部押して、エラーが出ないか・画面が空にならないか
      - うなぎ診断を最後まで進めて、結果が出るか
      - 診断結果と原価計算の「LINEで送る」を押して、LINEの送信画面が文章つきで開くか
+     - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 営業記録：社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
@@ -176,6 +177,27 @@ if sync_playwright:
                         else:
                             ok("営業記録：訪問を記録して送信")
                             if "まだ送れていない" in pg.inner_text("main"): bad("営業記録：送ったのに「未送信」のまま")
+            # 見積書（社員登録済みの端末で：商品1行で出せる・値引きすると承認待ちで止まる）
+            if pg.locator('nav.tabs a[href="#quote"]').count():
+                pg.click('nav.tabs a[href="#quote"]'); pg.wait_for_timeout(400)
+                r = pg.evaluate("""()=>{ const t = getPricing().tiers[0];
+                  const p = S.products.find(x=>(x.sizes||[]).some(z=>sellQuote(x,z,t))); if (!p) return {skip:true};
+                  const z = p.sizes.find(z=>sellQuote(p,z,t)); const q = qtBlank(); q.shop = "チェック用の店";
+                  q.items = [{id:"c1", product:p.name, size:z, kind:"shiro", qty:"20", price:""}]; S.qt = q; render();
+                  const c = qtCalc(q), P = parseFloat(z), rule = sellQuote(p,z,c.tier).hi;
+                  const per = Math.ceil((rule+1100)/P/50)*50;
+                  const okCalc = c.lines[0] && c.lines[0].up===per && c.total===c.base8+c.base10+Math.floor(c.base8*0.08)+Math.floor(c.base10*0.1);
+                  const btn = () => [...document.querySelectorAll("main button")].find(b=>b.textContent.includes("見積書をPDFにする"));
+                  const en1 = btn() && !btn().disabled;
+                  q.items[0].price = String(sellQuote(p,z,c.tier).lo - 100); render();
+                  const en2 = btn() && !btn().disabled;
+                  S.qt = qtBlank(); render();
+                  return {okCalc, en1, en2}; }""")
+                if r.get("skip"): ok("見積書：価格のある商品がないので計算の確認は省略")
+                elif not r.get("okCalc"): bad("見積書：白焼1枚の単価または合計の計算が合わない")
+                elif not r.get("en1"): bad("見積書：商品を入れても「PDFにする」が押せない")
+                elif r.get("en2"): bad("見積書：値引きしたのに承認なしで出せてしまう")
+                else: ok("見積書：計算・値引きの承認待ち")
             if errors and not any("エラー" in x for x in problems):
                 bad("画面でエラーが出ている: " + errors[0][:160])
         b.close()
