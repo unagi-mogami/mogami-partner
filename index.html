@@ -2100,7 +2100,7 @@ function recMe(){
   const m = lsGet(REC_ME_KEY, null);
   return m && m.name && m.pin ? m : null;
 }
-const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", reg:{name:"", pin:""}, busy:false});
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", reg:{name:"", pin:""}, busy:false});
 const ymKey = iso => String(iso||"").slice(0,7);
 async function recPost(rec){
   if (recDb() && rec.uid){ await S.db.collection("records").doc(rec.id).set(rec); return; }
@@ -2184,12 +2184,13 @@ function recordView(){
       if (!R.product) return toast("成約した商品を選んでください");
       if (!isNum(R.kg) || Number(R.kg)<=0) return toast("1回の数量（kg）を入れてください");
       if (!isNum(R.price) || Number(R.price)<=0) return toast("販売単価（円/kg）を入れてください");
-      Object.assign(f, {product:R.product, kg:Number(R.kg), price:Number(R.price), newDeal:R.newDeal==="新規"});
+      if (!R.size) return toast("サイズを選んでください（わからなければ「わからない」）");
+      Object.assign(f, {product:R.product, size:R.size, kg:Number(R.kg), price:Number(R.price), newDeal:R.newDeal==="新規"});
     }
     R.busy = true; render();
     const rec = await recAdd(f);
     R.busy = false;
-    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", kg:"", price:"", detail:"", newDeal:"新規"}); }
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規"}); }
     render();
   };
   const undo = async x => { if (await recAdd({kind:"cancel", ref:x.id, shop:x.shop})){ toast("取り消しました"); render(); } };
@@ -2205,6 +2206,7 @@ function recordView(){
       R.kind==="sample" ? field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])) : null,
       R.kind==="deal" ? h("div",{class:"grid2"},
         field("成約した商品", sel(R,"product",[["","選んでください"], ...prodNames.map(n=>[n,n])])),
+        field("サイズ", sel(R,"size",[["","選んでください"], ...SIZES.map(z=>[z,z]), ["any","わからない・混在"]])),
         field("1回の数量（kg）", h("input",{class:"i", id:"rec-kg", type:"number", inputmode:"decimal", min:0, placeholder:"例：10", ...bind(R,"kg","num")})),
         field("販売単価（円/kg・税抜）", h("input",{class:"i", id:"rec-price", type:"number", inputmode:"numeric", min:0, placeholder:"例：4300", ...bind(R,"price","num")})),
         field("新規・既存", sel(R,"newDeal",[["新規","新規のお店（初めての取引）"],["既存","既存のお店（新しい商品の採用）"]]))) : null,
@@ -2215,7 +2217,7 @@ function recordView(){
       h("div",{class:"log"}, log.length ? log.slice(0,30).map(x=>h("div",{class:"e"},
         h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null,
           x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
-        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : ""), x.memo ? h("div",{class:"small muted"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : ""), x.memo ? h("div",{class:"small muted"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
     STANDALONE || S.guest ? h("details",{class:"x"}, h("summary",null,"名前・暗証番号を変える"),
       h("div",{class:"panel stack"}, h("p",{class:"small",style:"margin:0"},"登録を消して、もう一度登録します。送った記録は消えません。"),
         h("div",null, h("button",{class:"btn danger sm", onclick:()=>{ try { localStorage.removeItem(REC_ME_KEY); } catch(e){} render(); }},"登録をやり直す")))) : null);
