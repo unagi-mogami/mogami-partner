@@ -921,7 +921,11 @@ const APP_URL = location.origin + location.pathname;
 /* 社員・お客様に配るのは独立版（GitHub Pages）のリンク */
 const PUBLIC_URL = "https://unagi-mogami.github.io/mogami-partner/";
 const lineUrl = text => "https://line.me/R/share?text=" + encodeURIComponent(text);
-function lineButton(text, label){ return h("a",{class:"btn line", href:lineUrl(text), target:"_blank", rel:"noopener"}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), label||"LINEで送る"); }
+/* LINEボタン：押した瞬間に文章もコピーしておく（アプリ内表示などでLINEが開けない時は、LINEに貼り付ければ送れる） */
+function lineBackupCopy(text){
+  try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast("文章もコピーしました。LINEが開かない時は、LINEに貼り付けて送ってください"), ()=>{}); } catch(e){}
+}
+function lineButton(text, label){ return h("a",{class:"btn line", href:lineUrl(text), target:"_blank", rel:"noopener", onclick:()=>lineBackupCopy(text)}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), label||"LINEで送る"); }
 function copyButton(text, label){
   return h("button",{class:"btn", type:"button", onclick:async e=>{
     const b = e.currentTarget;
@@ -1646,7 +1650,7 @@ function quickSend(){
   const notYet = () => toast("数字を入れて、下に結果が出てから送れます");
   return h("div",{class:"panel row noprint",style:"padding:10px 14px;gap:8px"},
     h("b",{style:"flex:1 1 7em"},"お客様に送る"),
-    h("button",{class:"btn line sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); const u = lineUrl(t); if (!window.open(u, "_blank", "noopener")) location.href = u; }},
+    h("a",{class:"btn line sm", href:"https://line.me/R/share", target:"_blank", rel:"noopener", onclick:e=>{ const t = currentSendText(); if (!t){ e.preventDefault(); return notYet(); } e.currentTarget.href = lineUrl(t); lineBackupCopy(t); }},
       h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "LINEで送る"),
     h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"));
 }
