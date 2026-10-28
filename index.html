@@ -299,6 +299,8 @@ details.memo>summary{font-size:12px;color:var(--muted);font-weight:500}
 .tabbar button{flex:1 1 auto;white-space:normal;line-height:1.35;padding:8px 12px;text-align:center}
 /* 印刷・PDF：画面の操作部品を外した「控え」を作って印刷する */
 #print-area{display:none}
+.pdfsheet{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:rgba(0,0,0,.35)}
+.pdfsheet .panel{max-width:520px;margin:0 auto;box-shadow:0 -4px 20px rgba(0,0,0,.2)}
 .printval{display:inline-block;min-width:4em;padding:2px 8px;border-bottom:1px solid var(--line);font-weight:700}
 .print-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:14px;font-size:12px}
 .print-head b{font-family:var(--f-display);font-size:16px;letter-spacing:.1em}
@@ -1588,6 +1590,21 @@ async function printView(){
 /* PDFを作る：控えを画像にしてA4に貼る（日本語もそのまま残る）。ライブラリは押したときだけ読み込む */
 const PDF_LIBS = ["https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"];
 function loadScript(src){ return new Promise((ok, ng)=>{ if ([...document.scripts].some(x=>x.src===src)) return ok(); const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = ()=>ng(new Error("load "+src)); document.head.append(el); }); }
+/* 独立版：できたPDFを「LINEなどで送る」（スマホの共有画面）か「ファイルに保存」から選ぶ。
+   共有画面はボタンを押した直後しか開けないので、PDFができてからもう一度押してもらう */
+function pdfDownload(blob, name){ const url = URL.createObjectURL(blob), a = h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); }
+function pdfSheet(blob, name, title){
+  let f = null; try { f = new File([blob], name, {type:"application/pdf"}); } catch(e){}
+  const canShare = !!(f && navigator.canShare && navigator.canShare({files:[f]}));
+  if (!canShare){ pdfDownload(blob, name); toast("PDFを保存しました"); return; }
+  const close = () => sheet.remove();
+  const sheet = h("div",{class:"pdfsheet", role:"dialog", "aria-label":"PDFができました"},
+    h("div",{class:"panel stack"}, h("b",null,"PDFができました"), h("div",{class:"small muted"}, name),
+      h("button",{class:"btn line", type:"button", onclick:async()=>{ try { await navigator.share({files:[f], title}); close(); } catch(e){ if (e && e.name!=="AbortError") toast("送れませんでした。「ファイルに保存」をお試しください"); } }}, "LINEなどで送る"),
+      h("button",{class:"btn", type:"button", onclick:()=>{ pdfDownload(blob, name); close(); toast("PDFを保存しました"); }}, "ファイルに保存"),
+      h("button",{class:"btn ghost", type:"button", onclick:close}, "閉じる")));
+  document.querySelectorAll(".pdfsheet").forEach(x=>x.remove()); document.body.append(sheet);
+}
 let pdfBusy = false;
 async function savePdf(){
   if (pdfBusy) return; pdfBusy = true;
@@ -1609,7 +1626,7 @@ async function savePdf(){
     }
     const blob = pdf.output("blob"), name = "MOGAMI_"+title.replace(/[\\/:*?"<>|\s]+/g,"")+"_"+today()+".pdf";
     if (S.downloads){ await S.downloads.save({filename:name, data:blob}); toast("PDFを保存しました"); }
-    else { const url = URL.createObjectURL(blob), a = h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); toast("PDFを保存しました"); }
+    else pdfSheet(blob, name, title);
   } catch(e){ console.warn(e); if (!(e && e.code==="declined")) toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }
   finally { area.replaceChildren(); area.style.cssText = ""; pdfBusy = false; }
 }
