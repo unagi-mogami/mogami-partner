@@ -338,6 +338,8 @@ const APP_JS = (document.currentScript && document.currentScript.textContent) ||
 const STATIC_MARKUP = "<header class=\"top\">\n  <div class=\"brand\"><b>MOGAMI PARTNER</b><span>株式会社もがみ 社内業務支援</span></div>\n  <div class=\"who\" id=\"who\"></div>\n</header>\n<div class=\"shell\">\n  <nav class=\"side\" id=\"side\" aria-label=\"メインメニュー\"></nav>\n  <main id=\"main\"><div class=\"gate\"><p class=\"eyebrow\">接続中</p><h1>社員情報を確認しています</h1><p class=\"muted\">ログイン状態とデータベースへの接続を確認しています。数秒お待ちください。</p></div></main>\n</div>\n<nav class=\"tabs\" id=\"tabs\" aria-label=\"メインメニュー\"></nav>\n<div id=\"toastHost\"></div>";
 const HEAD_BITS = "<title>MOGAMI PARTNER</title>\n<meta name=\"claude:viewport-fit-sides\" content=\"cover\">\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap\">\n";
 if (document.currentScript) document.currentScript.insertAdjacentHTML("beforebegin", STATIC_MARKUP);
+/* スマホがダークモードでも、いつも白い背景で表示する */
+try { document.documentElement.setAttribute("data-theme","light"); } catch(e){}
 let PUB = null; try { PUB = JSON.parse(document.getElementById("pub-data").textContent); } catch(e){}
 /* ============ 定義 ============ */
 const ROLES = {admin:"管理者", sales:"営業", order:"受注", floor:"現場", delivery:"配送"};
@@ -1563,7 +1565,7 @@ function printCopy(){
   /* 控えに要らないもの：入力用の枠・点数の内訳・条件外や4位以下の一覧・候補にならない行・補足のヒント */
   c.querySelectorAll(".shopname, .bd, .hint, details, tr.dim").forEach(x=>x.remove());
   c.querySelectorAll("#ju-out").forEach(x=>{ const sm = x.closest(".sim"); if (sm) sm.classList.add("one"); });
-  c.querySelectorAll("#order-kg").forEach(x=>{ const pn = x.closest(".panel"); if (pn) pn.remove(); });
+  c.querySelectorAll(".panel").forEach(pn=>{ if (!pn.querySelector(".rec") && /1回の注文量（kg）/.test(pn.textContent) && pn.querySelectorAll("label.f").length<=2) pn.remove(); });
   c.querySelectorAll("tr").forEach(r=>{ if (/原価未登録/.test(r.textContent)) r.remove(); });
   c.querySelectorAll(".tablewrap.stacked").forEach(w=>w.classList.remove("stacked"));
   c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x=>x.removeAttribute("id"));
@@ -1581,14 +1583,38 @@ async function printView(){
     window.addEventListener("afterprint", done);
     setTimeout(()=>window.print(), 50); return;
   }
-  /* claude.ai版（埋め込み表示）は印刷画面を開けないので、印刷用のファイルを保存する */
-  const dl = S.downloads; if (!dl){ toast("この画面では印刷できません。独立版で開いてください"); return; }
-  const css = (document.getElementById("app-style")||{}).textContent || "";
-  const html = '<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title.replace(/</g,"&lt;")+'</title><style>'+css+' #print-area{display:block!important} body{padding:16px}</style></head><body><div id="print-area">'+node.innerHTML+'</div></body></html>';
-  try { await dl.save({filename:"MOGAMI_"+title.replace(/[\\/:*?"<>|\s]+/g,"")+"_"+today()+".html", data:html}); toast("印刷用のファイルを保存しました。開いて「共有」→「プリント」でPDFにもできます"); }
-  catch(e){ if (!(e && e.code==="declined")) toast("保存できませんでした。もう一度お試しください"); }
+  return savePdf();
 }
-function printButton(label){ return h("button",{class:"btn", type:"button", onclick:printView}, label||"印刷・PDF"); }
+/* PDFを作る：控えを画像にしてA4に貼る（日本語もそのまま残る）。ライブラリは押したときだけ読み込む */
+const PDF_LIBS = ["https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"];
+function loadScript(src){ return new Promise((ok, ng)=>{ if ([...document.scripts].some(x=>x.src===src)) return ok(); const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = ()=>ng(new Error("load "+src)); document.head.append(el); }); }
+let pdfBusy = false;
+async function savePdf(){
+  if (pdfBusy) return; pdfBusy = true;
+  const {title, node} = printCopy();
+  let area = document.getElementById("print-area"); if (!area){ area = h("div",{id:"print-area"}); document.body.append(area); }
+  area.replaceChildren(node); area.style.cssText = "display:block;position:absolute;left:-12000px;top:0;width:760px;background:#fff;color:#000;padding:4px";
+  toast("PDFを作っています…");
+  try {
+    for (const u of PDF_LIBS) await loadScript(u);
+    try { await document.fonts.ready; } catch(e){}
+    const canvas = await window.html2canvas(area, {scale:2, backgroundColor:"#ffffff", useCORS:true, logging:false});
+    const pdf = new window.jspdf.jsPDF({unit:"mm", format:"a4", orientation:"portrait"});
+    const M = 10, W = 210 - M*2, H = 297 - M*2, pxPerMm = canvas.width / W, pageHpx = Math.floor(H * pxPerMm);
+    for (let y = 0, i = 0; y < canvas.height; y += pageHpx, i++){
+      const hpx = Math.min(pageHpx, canvas.height - y), part = document.createElement("canvas");
+      part.width = canvas.width; part.height = hpx; part.getContext("2d").drawImage(canvas, 0, y, canvas.width, hpx, 0, 0, canvas.width, hpx);
+      if (i) pdf.addPage();
+      pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", M, M, W, hpx / pxPerMm);
+    }
+    const blob = pdf.output("blob"), name = "MOGAMI_"+title.replace(/[\\/:*?"<>|\s]+/g,"")+"_"+today()+".pdf";
+    if (S.downloads){ await S.downloads.save({filename:name, data:blob}); toast("PDFを保存しました"); }
+    else { const url = URL.createObjectURL(blob), a = h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); toast("PDFを保存しました"); }
+  } catch(e){ console.warn(e); if (!(e && e.code==="declined")) toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }
+  finally { area.replaceChildren(); area.style.cssText = ""; pdfBusy = false; }
+}
+function canPrintDialog(){ try { return window.self===window.top; } catch(e){ return false; } }
+function printButton(){ return [h("button",{class:"btn", type:"button", onclick:savePdf}, "PDFで保存"), canPrintDialog() ? h("button",{class:"btn", type:"button", onclick:printView}, "印刷") : null]; }
 function sendBox(title, text){
   return h("div",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,title), h("div",{class:"small muted"},"お店側の数字だけを文章にします（もがみの仕入原価・利益は入りません）。")),
     lineButton(text, "お客様にLINEで送る"), copyButton(text), printButton());
