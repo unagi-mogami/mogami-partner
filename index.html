@@ -2056,7 +2056,9 @@ function installNudge(){
     h("button",{class:"btn sm ghost", onclick:()=>{ S.nudgeClosed = true; try{ localStorage.setItem("mp-install-nudge","1"); }catch(e){} render(); }},"閉じる"));
 }
 const INSTALL_TEXT = "【MOGAMI アプリの入れ方】\n\n■iPhone\n①一緒に送ったアイコン画像を長押しして保存\n②このリンクを開いて「ショートカットを追加」\n" + SHORTCUT_URL + "\n③ショートカットアプリで「MOGAMI」を長押し→詳細→ホーム画面に追加→アイコンをタップ→写真を選択で①の画像→追加\n\n■Android\nChromeで下のリンクを開き、右上の︙→ホーム画面に追加\n" + APP_URL;
-const STANDALONE_INSTALL_TEXT = () => "【MOGAMI うなぎ診断】\n" + PUBLIC_URL + "\n\nリンクを開くと、ログインなしで診断と原価計算が使えます。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加";
+/* 送るリンクには日付を付ける（LINEの中のブラウザが前に開いた古いページを出さないため） */
+const shareLink = () => { const d = new Date(), p = n => String(n).padStart(2,"0"); return PUBLIC_URL + "?v=" + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()); };
+const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・社員の方は「共有」→「社員として登録する」で、見積書・営業記録も使えます\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
 function stepList(items){ return h("ol",{class:"steplist"}, items.map(x=>h("li",null,x))); }
 function installView(){
   const ios = isIOS() || !isAndroid(), line = isLineApp();
@@ -2119,8 +2121,8 @@ function shareView(){
     h("div",{class:"pagehead"}, h("h1",null,"共有"), h("p",null,"社員・お客様にアプリを送る方法です。")),
     h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"LINEでアプリを送る"),
       h("div",{class:"formula",style:"white-space:pre-wrap"}, invite),
-      h("div",{class:"row"}, lineButton(invite, "LINEで送る"), copyButton(invite, "文章をコピー"), copyButton(PUBLIC_URL, "リンクだけコピー")),
-      h("div",{class:"banner info"}, h("div",null, "このリンク（独立版）を受け取った人は、ログインなしで診断と原価計算が使えます。仕入原価・粗利・顧客情報は表示されません。ホーム画面に追加すると、もがみのアイコンが付きます。"))),
+      h("div",{class:"row"}, lineButton(invite, "LINEで送る"), copyButton(invite, "文章をコピー"), copyButton(shareLink(), "リンクだけコピー")),
+      h("div",{class:"banner info"}, h("div",null, "このリンク（独立版）を受け取った人は、合言葉を入れるとログインなしで診断と原価計算が使えます。社員として登録した人は、見積書・営業記録も使えます。仕入原価・粗利・顧客情報は表示されません。合言葉は別にLINEで送ってください。"))),
     STANDALONE ? null : h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社長用（このclaude.ai版）"),
       h("p",{class:"small",style:"margin:0"},"商品マスタ・価格ルール・顧客カルテの管理と、LINEで届いた内容の取り込みは、このclaude.ai版で行います。社員には送らないでください。")),
     S.isOwner ? backupPanel() : null);
