@@ -2360,7 +2360,7 @@ function resValid(withExcluded){
 /* 社員が出した見積書を、社長の画面で見る・PDFにする */
 function qtSnapDoc(r){
   const sq = r.quote;
-  return qtDoc({no:sq.no, date:sq.date, shop:sq.shop, person:sq.person||"", memo:sq.memo||""}, sq, {need:sq.disc>0, ok:!!sq.appr}, r.name);
+  return qtDoc({no:sq.no, date:sq.date, shop:sq.shop, person:sq.person||"", memo:sq.memo||"", delivery:sq.delivery||""}, sq, {need:sq.disc>0, ok:!!sq.appr}, r.name);
 }
 function qtSnapView(r){
   const sq = r.quote, X = resState(), open = X.openQ===r.id;
@@ -2607,15 +2607,18 @@ const procOf = k => PROC.find(x=>x[0]===k) || PROC[0];
 const QT_VALID_DAYS = 7;
 /* うなぎ以外の品目（付属品）。社長が claude.ai版の見積書タブで直すと settings/extras に入り、1日4回の自動更新で独立版にも届く */
 const EXTRAS_DEFAULT = [
-  {id:"sansho-ishimoto", name:"山椒 いし本（1000個入り）", unit:"P", price:3600, tax:10},
-  {id:"sansho-wanokaori", name:"山椒 和の香（1000個入り）", unit:"P", price:3700, tax:10},
-  {id:"koi", name:"活鯉", unit:"kg", price:1700, tax:10},
+  {id:"sansho-ishimoto", name:"山椒 いし本（1000個入り）", unit:"P", price:3600, tax:8},
+  {id:"sansho-wanokaori", name:"山椒 和の香（1000個入り）", unit:"P", price:3700, tax:8},
+  {id:"koi", name:"活鯉", unit:"kg", price:1700, tax:8},
   {id:"dojo-s", name:"小どじょう", unit:"kg", price:3200, tax:8},
   {id:"dojo-l", name:"大どじょう", unit:"kg", price:3200, tax:8},
   {id:"kushi-bokka", name:"ボッカ串", unit:"束", price:1010, tax:10},
   {id:"kushi-kikai", name:"機械串", unit:"束", price:1010, tax:10}];
 /* 運賃：活鰻の合計が5kg未満のとき、1個口あたり。5kg以上は運賃なし */
 const SHIP_DEFAULT = {name:"運賃", unit:"個口", price:1700, tax:10, underKg:5};
+/* 納品方法。運賃は「宅配」を使う時だけ（さらに活鰻が5kg未満の時） */
+const DELIVERY = [["own","もがみの配送"],["takuhai","宅配便"],["pickup","店頭引き取り"]];
+const deliveryLabel = k => (DELIVERY.find(x=>x[0]===k)||[,""])[1];
 function getExtras(){ const x = S.extras?.items || PUB?.extras?.items; return Array.isArray(x) && x.length ? x : EXTRAS_DEFAULT; }
 function getShip(){ return {...SHIP_DEFAULT, ...(S.extras?.ship || PUB?.extras?.ship || {})}; }
 const APR_PUB = {"kty":"EC","crv":"P-256","x":"sMi7nWiu58UqoINm7LvgmfS8UkDpQuwVhptO1m21k3M","y":"oWWI6_kS2O89rCIFCxs5UXex4xEm8Jqwsnrzm63LPqI"};
@@ -2626,7 +2629,7 @@ const jEnc = o => b64uEnc(new TextEncoder().encode(JSON.stringify(o)));
 const jDec = t => JSON.parse(new TextDecoder().decode(b64uDec(t)));
 const addDays = (ymd, n) => { const d = new Date(ymd+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const qtNo = () => { const d = today().replace(/-/g,"").slice(2); const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let r = ""; for (let i=0;i<4;i++) r += a[Math.floor(Math.random()*a.length)]; return "Q"+d+"-"+r; };
-const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], extras:[], ship:"1", noShip:false, memo:"", recorded:false});
+const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], extras:[], delivery:"", ship:"1", noShip:false, memo:"", recorded:false});
 function qtGet(){ if (!S.qt) S.qt = lsGet(QT_DRAFT, null) || qtBlank(); return S.qt; }
 function qtSave(){ const q = S.qt; if (!q) return; lsSet(QT_DRAFT, q); const sv = lsGet(QT_SAVED, {}); sv[q.no] = q; const ks = Object.keys(sv); if (ks.length > 20) ks.sort((a,b)=>String(sv[a].date).localeCompare(String(sv[b].date))).slice(0, ks.length-20).forEach(k=>delete sv[k]); lsSet(QT_SAVED, sv); }
 function qtKg(it){ const P = pOf(it.size); if (it.kind==="shiro") return isNum(it.qty) && P ? Number(it.qty)/P : 0; return isNum(it.qty) ? Number(it.qty) : 0; }
@@ -2663,7 +2666,7 @@ function qtCalc(q){
     if (rt===8) base8 += amt; else base10 += amt;
   }
   /* 運賃：活鰻が5kg未満なら個口×単価。外す時は値引きと同じく承認が必要 */
-  const SH = getShip(), anyLine = lines.length > 0, needShip = anyLine && totalKg < Number(SH.underKg);
+  const SH = getShip(), anyLine = lines.length > 0, needShip = anyLine && q.delivery==="takuhai" && totalKg < Number(SH.underKg);
   if (needShip){
     if (q.noShip) disc.push({product:SH.name, size:"-", kind:"ship", price:0, rule:Number(SH.price)});
     else { const n = isNum(q.ship) && Number(q.ship) > 0 ? Number(q.ship) : 1, amt = Math.round(Number(SH.price)*n);
@@ -2671,7 +2674,7 @@ function qtCalc(q){
       if (Number(SH.tax)===8) base8 += amt; else base10 += amt; }
   }
   const tax8 = Math.floor(base8*0.08), tax10 = Math.floor(base10*0.10);
-  return {lines, totalKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing, needShip};
+  return {lines, totalKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing, needShip, noDelivery: !q.delivery};
 }
 /* 承認：社長の署名を確かめる */
 async function aprVerify(code){
@@ -2715,7 +2718,7 @@ function qtText(q, c){
   return "【御見積】"+q.shop.trim()+" 御中\n見積番号："+q.no+"\n発行日："+fmtDate(q.date)+"（有効期限 "+fmtDate(addDays(q.date, QT_VALID_DAYS))+"）\n\n"+
     c.lines.map(l=>"・"+l.name+"　"+num(l.qty,2).replace(/\.?0+$/,"")+l.unit+" × "+yen(l.up)+" ＝ "+yen(l.amount)).join("\n")+
     "\n\n小計（8%対象）"+yen(c.base8)+"　消費税 "+yen(c.tax8)+(c.base10 ? "\n小計（10%対象）"+yen(c.base10)+"　消費税 "+yen(c.tax10) : "")+
-    "\n合計（税込）"+yen(c.total)+"\n\n"+CO.name+"　担当："+(recMe()?.name||"")+"\nTEL "+CO.tel+"　FAX "+CO.fax;
+    "\n合計（税込）"+yen(c.total)+(q.delivery ? "\n納品方法："+deliveryLabel(q.delivery) : "")+"\n\n"+CO.name+"　担当："+(recMe()?.name||"")+"\nTEL "+CO.tel+"　FAX "+CO.fax;
 }
 function qtDoc(q, c, appr, staff){
   const me = staff ? {name:staff} : recMe(), exp = addDays(q.date, QT_VALID_DAYS);
@@ -2729,7 +2732,7 @@ function qtDoc(q, c, appr, staff){
         h("p",{style:"margin:8px 0 0"},"下記のとおりお見積り申し上げます。"),
         h("div",{class:"qd-total"}, h("span",null,"御見積金額（税込）"), h("b",null, yen(c.total)))),
       h("div",{class:"qd-from"},
-        h("div",{class:"qd-meta"}, h("span",null,"見積番号"), h("span",null,q.no), h("span",null,"発行日"), h("span",null,fmtDate(q.date)), h("span",null,"有効期限"), h("span",null,fmtDate(exp)+"（"+QT_VALID_DAYS+"日間）")),
+        h("div",{class:"qd-meta"}, h("span",null,"見積番号"), h("span",null,q.no), h("span",null,"発行日"), h("span",null,fmtDate(q.date)), h("span",null,"有効期限"), h("span",null,fmtDate(exp)+"（"+QT_VALID_DAYS+"日間）"), q.delivery ? [h("span",null,"納品方法"), h("span",null,deliveryLabel(q.delivery))] : null),
         h("div",{class:"co"}, CO.name), h("div",null, CO.zip+" "+CO.addr), h("div",null,"TEL "+CO.tel+"　FAX "+CO.fax), h("div",null,"登録番号 "+CO.inv),
         h("div",null,"担当："+(me?.name||""), appr && appr.need && appr.ok ? h("span",{class:"qd-stamp"},"値引き承認済") : null))),
     h("div",{style:"font-size:10.5px;text-align:right;margin-top:4px"},"単価・金額は税抜"),
@@ -2744,7 +2747,7 @@ function qtDoc(q, c, appr, staff){
 function qtSnap(q){
   const c = qtCalc(q), a = qtApproval(q, c);
   return {no:q.no, date:q.date, shop:q.shop.trim(), person:q.person.trim(), memo:q.memo.trim(), kg:Math.round(c.totalKg*100)/100,
-    lines:c.lines.map(l=>({name:l.name, qty:l.qty, unit:l.unit, up:l.up, amount:l.amount, rate:l.rate, parts:l.parts})),
+    delivery:q.delivery||"", lines:c.lines.map(l=>({name:l.name, qty:l.qty, unit:l.unit, up:l.up, amount:l.amount, rate:l.rate, parts:l.parts})),
     base8:c.base8, base10:c.base10, tax8:c.tax8, tax10:c.tax10, total:c.total, disc:c.disc.length, appr:!!(a.need && a.ok)};
 }
 function qtRecord(q){
@@ -2759,7 +2762,7 @@ function quoteView(){
   const upd = (fn, rr) => { fn(); qtSave(); if (rr!==false) render(); };
   const prods = (S.products||[]).filter(p=>p.sizes && p.sizes.length);
   const blocked = (appr.need && !appr.ok) || !!S.newVersion;
-  const ready = q.shop.trim() && c.lines.length && !c.missing;
+  const ready = q.shop.trim() && c.lines.length && !c.missing && !c.noDelivery;
   const items = q.items.map((it, i)=>{
     const p = prods.find(x=>x.name===it.product), rq = qtRule(it, c.tier), P = pOf(it.size), fee = procOf(it.kind)[2];
     const price = isNum(it.price) ? Number(it.price) : (rq ? rq.hi : null), low = rq && price!=null && price < rq.lo;
@@ -2799,7 +2802,7 @@ function quoteView(){
         h("div",{class:"stack"}, h("textarea",{class:"i", id:"qt-apr", placeholder:"社長から届いた文章をそのまま全部貼り付け"}),
           h("div",null, h("button",{class:"btn sm primary", onclick:()=>aprImport(document.getElementById("qt-apr").value)},"読み込む"))))) :
       (appr.need && appr.ok ? h("div",{class:"banner info"}, h("div",null,"値引きは社長の承認済みです。")) : null),
-    h("section",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る"), h("div",{class:"small muted"}, S.newVersion ? "新しい版があります。画面の上の「更新する」を押してから送ってください（古い単価で送らないため）。" : blocked ? "値引きの承認が届くまで送れません。" : !ready ? "お店の名前と商品・数量を入れると送れます。" : "PDFにしてLINEで送れます。送ると営業記録の「見積」に自動で入ります。")),
+    h("section",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る"), h("div",{class:"small muted"}, S.newVersion ? "新しい版があります。画面の上の「更新する」を押してから送ってください（古い単価で送らないため）。" : blocked ? "値引きの承認が届くまで送れません。" : !ready ? (c.noDelivery && q.shop.trim() && c.lines.length ? "納品方法を選ぶと送れます。" : "お店の名前と商品・数量・納品方法を入れると送れます。") : "PDFにしてLINEで送れます。送ると営業記録の「見積」に自動で入ります。")),
       h("button",{class:"btn primary", disabled: blocked || !ready, onclick:()=>savePdf({title:"御見積書 "+q.shop.trim(), node:qtDoc(q, c, appr), file:"御見積書_"+q.shop.trim().replace(/[\\/:*?"<>|\s]+/g,"")+"_"+q.no+".pdf", after:()=>qtRecord(q)})}, "見積書をPDFにする"),
       blocked || !ready ? null : h("a",{class:"btn line", href:lineUrl(qtText(q, c)), target:"_blank", rel:"noopener", onclick:()=>{ lineBackupCopy(qtText(q, c)); qtRecord(q); }}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "文章でLINEに送る")),
     h("section",{class:"sec"}, h("h2",null,"見積書のプレビュー"), h("div",{class:"qprev"}, qtDoc(q, c, appr))),
@@ -2824,8 +2827,11 @@ function qtExtrasEditor(q, c, upd){
   });
   return [h("section",{class:"sec"}, h("h2",{style:"font-size:16px"},"うなぎ以外（山椒・どじょう・串など）"), rows,
       h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.extras.push({id:rid(), eid:"", qty:"", price:""}); })},"＋ うなぎ以外を追加"))),
+    h("section",{class:"panel stack"}, h("b",null,"納品方法"),
+      h("div",{class:"seg", style:"grid-template-columns:repeat(3,minmax(0,1fr))", role:"radiogroup","aria-label":"納品方法"}, DELIVERY.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(q.delivery===k), onclick:()=>upd(()=>{ q.delivery = k; })}, h("b",{style:"font-size:14px"},l)))),
+      h("span",{class:"qhint"}, q.delivery==="takuhai" ? (c.totalKg < Number(SH.underKg) ? "活鰻が"+SH.underKg+"kg未満なので、運賃がつきます。" : "活鰻が"+SH.underKg+"kg以上なので、運賃はつきません。") : q.delivery ? "運賃はつきません。" : "選ぶと見積書を出せます（運賃は宅配便の時だけ）。")),
     c.needShip ? h("section",{class:"panel stack"},
-      h("b",null,"運賃（活鰻が"+SH.underKg+"kg未満のため）"),
+      h("b",null,"運賃（宅配便・活鰻が"+SH.underKg+"kg未満のため）"),
       h("div",{class:"grid2"},
         field("個口", h("input",{class:"i", id:"qt-ship", type:"number", inputmode:"numeric", min:1, value:q.ship ?? "1", disabled:!!q.noShip, oninput:e=>{ q.ship = e.target.value; qtSave(); }, onchange:()=>render()}), "1個口 "+yen(SH.price)+"（税"+SH.tax+"%）"),
         h("label",{class:"f"}, "運賃をなしにする", h("div",{class:"yn"}, h("button",{type:"button", class:"alt", "aria-pressed":String(!q.noShip), onclick:()=>upd(()=>{ q.noShip = false; })},"つける"), h("button",{type:"button", "aria-pressed":String(!!q.noShip), onclick:()=>upd(()=>{ q.noShip = true; })},"なし")),

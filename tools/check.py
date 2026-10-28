@@ -210,7 +210,7 @@ if sync_playwright:
                 r = pg.evaluate("""()=>{ const t = getPricing().tiers[0];
                   const p = S.products.find(x=>(x.sizes||[]).some(z=>sellQuote(x,z,t))); if (!p) return {skip:true};
                   const z = p.sizes.find(z=>sellQuote(p,z,t)); const q = qtBlank(); q.shop = "チェック用の店";
-                  q.items = [{id:"c1", product:p.name, size:z, kind:"shiro", qty:"20", price:""}]; S.qt = q; render();
+                  q.items = [{id:"c1", product:p.name, size:z, kind:"shiro", qty:"20", price:""}]; q.delivery = "own"; S.qt = q; render();
                   const c = qtCalc(q), P = parseFloat(z), rule = sellQuote(p,z,c.tier).hi;
                   const per = Math.ceil((rule+1100)/P/50)*50;
                   const okCalc = c.lines[0] && c.lines[0].up===per && c.total===c.base8+c.base10+Math.floor(c.base8*0.08)+Math.floor(c.base10*0.1);
@@ -229,15 +229,17 @@ if sync_playwright:
             if pg.evaluate("()=>typeof getExtras==='function'"):
                 r = pg.evaluate("""()=>{ const ex = getExtras(), sh = getShip(); if (!ex.length) return {none:true};
                   const e8 = ex.find(x=>Number(x.tax)===8), e10 = ex.find(x=>Number(x.tax)!==8);
-                  const q = qtBlank(); q.shop = "チェック用の店"; q.items = []; q.extras = [e8,e10].filter(Boolean).map((x,i)=>({id:"x"+i, eid:x.id, qty:"2", price:""}));
+                  const q = qtBlank(); q.shop = "チェック用の店"; q.items = []; q.extras = [e8,e10].filter(Boolean).map((x,i)=>({id:"x"+i, eid:x.id, qty:"2", price:""})); q.delivery = "takuhai";
+                  q.delivery = "own"; const noShipOwn = !qtCalc(q).lines.some(l=>l.name.startsWith(sh.name)); q.delivery = "takuhai";
                   const c = qtCalc(q), ship = c.lines.find(l=>l.name.startsWith(sh.name));
                   const b8 = (e8 ? e8.price*2 : 0), b10 = (e10 ? e10.price*2 : 0) + Number(sh.price);
                   const okSum = c.base8===b8 && c.base10===b10 && c.total===b8+b10+Math.floor(b8*0.08)+Math.floor(b10*0.1);
                   q.noShip = true; const shipAppr = qtCalc(q).disc.some(d=>d.kind==="ship"); q.noShip = false;
                   q.extras[0].price = String(Number(ex.find(x=>x.id===q.extras[0].eid).price)-10); const lowAppr = qtCalc(q).disc.some(d=>d.kind==="extra");
-                  return {okSum, ship:!!ship, shipAppr, lowAppr}; }""")
+                  return {okSum, ship:!!ship, shipAppr, lowAppr, noShipOwn}; }""")
                 if r.get("none"): bad("見積書：うなぎ以外の価格表が空")
-                elif not r.get("ship"): bad("見積書：活鰻5kg未満なのに運賃がつかない")
+                elif not r.get("ship"): bad("見積書：宅配便・活鰻5kg未満なのに運賃がつかない")
+                elif not r.get("noShipOwn"): bad("見積書：宅配便でないのに運賃がつく")
                 elif not r.get("okSum"): bad("見積書：うなぎ以外・運賃の税率別の計算が合わない")
                 elif not (r.get("shipAppr") and r.get("lowAppr")): bad("見積書：運賃なし・付属品の値引きが承認なしで通ってしまう")
                 else: ok("見積書：うなぎ以外・運賃")
