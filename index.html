@@ -737,6 +737,7 @@ function resultView(){
   wrap.append(h("div",{class:"pagehead"}, h("h1",{id:"res-title"},headTxt()),
     h("p",null, [COOK[A.cook], A.tare!=null && A.tare!=="" ? "タレ："+tareText(A.tare) : null, "味："+lbl(FAT,A.fat), isNum(A.oil) ? "脂："+lbl(OIL,A.oil) : null, "皮："+lbl(SKIN,A.skin), "身："+lbl(FLESH,A.flesh), "サイズ："+(A.size==="any"?"おまかせ":A.size), "注文量："+(A.orderKg ? tierLabel(getPricing().tiers.find(t=>String(t.from)===String(A.orderKg))||{from:A.orderKg,to:null}) : "未定"), "重視："+prioText(A)].filter(x=>x!=null).join("／")),
     h("div",{class:"act"}, h("button",{class:"btn", onclick:()=>{D.showResult=false; D.step=QUESTIONS.length-1; render();}},"回答を修正"), h("button",{class:"btn ghost", onclick:resetDiag},"新しく診断"))));
+  if (R.top.length) wrap.append(quickSend());
   wrap.append(h("div",{class:"panel row"},
     h("div",{style:"flex:1;min-width:200px"}, field("1回の注文量（kg）", h("input",{class:"i", id:"order-kg", type:"number", inputmode:"decimal", min:0, placeholder:"例：8", value: D.kg!=="" && D.kg!=null ? D.kg : (A.orderKg||""), onchange:e=>{D.kg=e.target.value; render();}}), "数字を変えると、販売単価と1回の金額を計算し直します。")),
     S.guest ? null : h("details",{class:"x",style:"flex:1;min-width:200px"}, h("summary",null,"社内向けの条件"),
@@ -1478,7 +1479,7 @@ function calcSim(s){
 function simulatorView(){
   const tab = S.simTab || "ju";
   const bar = h("div",{class:"tabbar",role:"tablist"}, [["ju","鰻重の原価率（新規向け）"],["cmp","仕入れ切替の比較"]].map(([k,l])=>h("button",{role:"tab","aria-selected":String(tab===k), onclick:()=>{ S.simTab=k; render(); }}, l)));
-  return h("div",{class:"stack"}, bar, tab==="cmp" ? simCompareView() : juView());
+  return h("div",{class:"stack"}, bar, quickSend(), tab==="cmp" ? simCompareView() : juView());
 }
 const FISH = [["0.5","半尾"],["2/3","2/3尾"],["0.75","3/4尾"],["1","1尾"],["1.5","1尾半"],["2","2尾"]];
 const fishVal = v => v==="2/3" ? 2/3 : toNum(v);
@@ -1632,6 +1633,23 @@ async function savePdf(){
 }
 function canPrintDialog(){ try { return window.self===window.top; } catch(e){ return false; } }
 function printButton(){ return [h("button",{class:"btn", type:"button", onclick:savePdf}, "PDFで保存"), canPrintDialog() ? h("button",{class:"btn", type:"button", onclick:printView}, "印刷") : null]; }
+/* 長い画面でも探さなくていいように、画面の上にも「お客様に送る」を置く（押した時点の内容を送る） */
+function currentSendText(){
+  if (S.route==="diagnose" && S.diag.showResult){ const R = recommend(S.diag.ans, S.diag.need); return R.top.length ? resultText(R) : null; }
+  if (S.route==="simulator"){
+    if ((S.simTab||"ju")==="cmp"){ const s = S.sim; if (!s) return null; const r = calcSim(s); return r.monthlyDiff!=null ? simText(s, r) : null; }
+    const j = S.ju; if (!j) return null; const c = juCalc(j); return c.price && c.fish && c.rows.some(r=>r.q && r.av!==false) ? juText(c, j) : null;
+  }
+  return null;
+}
+function quickSend(){
+  const notYet = () => toast("数字を入れて、下に結果が出てから送れます");
+  return h("div",{class:"panel row noprint",style:"padding:10px 14px;gap:8px"},
+    h("b",{style:"flex:1 1 7em"},"お客様に送る"),
+    h("button",{class:"btn line sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); const u = lineUrl(t); if (!window.open(u, "_blank", "noopener")) location.href = u; }},
+      h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "LINEで送る"),
+    h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"));
+}
 function sendBox(title, text){
   return h("div",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,title), h("div",{class:"small muted"},"お店側の数字だけを文章にします（もがみの仕入原価・利益は入りません）。")),
     lineButton(text, "お客様にLINEで送る"), copyButton(text), printButton());
