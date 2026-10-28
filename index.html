@@ -1946,7 +1946,7 @@ function buildSnapshot(){
       _sell:Object.fromEntries(sizes.map(s=>[s, T.map(t=>{ const q = quote(sizeCost(p,s), t); return q ? {lo:q.lo, hi:q.hi} : null; })]))};
   });
   const P = getPricing();
-  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights()};
+  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax})), ship:getShip()}};
 }
 const snapKey = o => o ? JSON.stringify({...o, builtAt:undefined}) : "";
 function snapStale(){ return S.isOwner && !S.guest && S.products.length && snapKey(buildSnapshot()) !== snapKey(PUB); }
@@ -2605,6 +2605,19 @@ const CO = {name:"株式会社もがみ", zip:"〒277-0053", addr:"千葉県柏�
 const PROC = [["live","活鰻",0],["hiraki","開き加工",400],["kushi","串打ち加工",800],["shiro","白焼加工",1100]];
 const procOf = k => PROC.find(x=>x[0]===k) || PROC[0];
 const QT_VALID_DAYS = 7;
+/* うなぎ以外の品目（付属品）。社長が claude.ai版の見積書タブで直すと settings/extras に入り、1日4回の自動更新で独立版にも届く */
+const EXTRAS_DEFAULT = [
+  {id:"sansho-ishimoto", name:"山椒 いし本（1000個入り）", unit:"P", price:3600, tax:10},
+  {id:"sansho-wanokaori", name:"山椒 和の香（1000個入り）", unit:"P", price:3700, tax:10},
+  {id:"koi", name:"活鯉", unit:"kg", price:1700, tax:10},
+  {id:"dojo-s", name:"小どじょう", unit:"kg", price:3200, tax:8},
+  {id:"dojo-l", name:"大どじょう", unit:"kg", price:3200, tax:8},
+  {id:"kushi-bokka", name:"ボッカ串", unit:"束", price:1010, tax:10},
+  {id:"kushi-kikai", name:"機械串", unit:"束", price:1010, tax:10}];
+/* 運賃：活鰻の合計が5kg未満のとき、1個口あたり。5kg以上は運賃なし */
+const SHIP_DEFAULT = {name:"運賃", unit:"個口", price:1700, tax:10, underKg:5};
+function getExtras(){ const x = S.extras?.items || PUB?.extras?.items; return Array.isArray(x) && x.length ? x : EXTRAS_DEFAULT; }
+function getShip(){ return {...SHIP_DEFAULT, ...(S.extras?.ship || PUB?.extras?.ship || {})}; }
 const APR_PUB = {"kty":"EC","crv":"P-256","x":"sMi7nWiu58UqoINm7LvgmfS8UkDpQuwVhptO1m21k3M","y":"oWWI6_kS2O89rCIFCxs5UXex4xEm8Jqwsnrzm63LPqI"};
 const QT_DRAFT = "mogami.qt.draft", QT_SAVED = "mogami.qt.saved", QT_APR = "mogami.qt.apr";
 const b64uEnc = u8 => { let s = ""; u8.forEach(b=>{ s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
@@ -2613,7 +2626,7 @@ const jEnc = o => b64uEnc(new TextEncoder().encode(JSON.stringify(o)));
 const jDec = t => JSON.parse(new TextDecoder().decode(b64uDec(t)));
 const addDays = (ymd, n) => { const d = new Date(ymd+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const qtNo = () => { const d = today().replace(/-/g,"").slice(2); const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let r = ""; for (let i=0;i<4;i++) r += a[Math.floor(Math.random()*a.length)]; return "Q"+d+"-"+r; };
-const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], memo:"", recorded:false});
+const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], extras:[], ship:"1", noShip:false, memo:"", recorded:false});
 function qtGet(){ if (!S.qt) S.qt = lsGet(QT_DRAFT, null) || qtBlank(); return S.qt; }
 function qtSave(){ const q = S.qt; if (!q) return; lsSet(QT_DRAFT, q); const sv = lsGet(QT_SAVED, {}); sv[q.no] = q; const ks = Object.keys(sv); if (ks.length > 20) ks.sort((a,b)=>String(sv[a].date).localeCompare(String(sv[b].date))).slice(0, ks.length-20).forEach(k=>delete sv[k]); lsSet(QT_SAVED, sv); }
 function qtKg(it){ const P = pOf(it.size); if (it.kind==="shiro") return isNum(it.qty) && P ? Number(it.qty)/P : 0; return isNum(it.qty) ? Number(it.qty) : 0; }
@@ -2639,8 +2652,26 @@ function qtCalc(q){
       if (fee){ const pa = Math.round(fee*kg); lines.push({name:label+"（"+nm+"）", qty:kg, unit:"kg", up:fee, amount:pa, rate:"10%"}); base10 += pa; }
     }
   }
+  /* うなぎ以外：価格表の単価より安い時は承認が必要 */
+  const EX = getExtras();
+  for (const it of (q.extras||[])){
+    const m = EX.find(x=>x.id===it.eid);
+    if (!m || !isNum(it.qty) || Number(it.qty)<=0){ if (it.eid || it.qty) missing++; continue; }
+    const price = isNum(it.price) ? Number(it.price) : Number(m.price), n = Number(it.qty), amt = Math.round(price*n), rt = Number(m.tax)===8 ? 8 : 10;
+    if (price < Number(m.price)) disc.push({product:m.name, size:"-", kind:"extra", price, rule:Number(m.price)});
+    lines.push({name:m.name, qty:n, unit:m.unit, up:price, amount:amt, rate:rt+"%"});
+    if (rt===8) base8 += amt; else base10 += amt;
+  }
+  /* 運賃：活鰻が5kg未満なら個口×単価。外す時は値引きと同じく承認が必要 */
+  const SH = getShip(), anyLine = lines.length > 0, needShip = anyLine && totalKg < Number(SH.underKg);
+  if (needShip){
+    if (q.noShip) disc.push({product:SH.name, size:"-", kind:"ship", price:0, rule:Number(SH.price)});
+    else { const n = isNum(q.ship) && Number(q.ship) > 0 ? Number(q.ship) : 1, amt = Math.round(Number(SH.price)*n);
+      lines.push({name:SH.name+"（活鰻"+SH.underKg+"kg未満）", qty:n, unit:SH.unit, up:Number(SH.price), amount:amt, rate:(Number(SH.tax)===8?8:10)+"%"});
+      if (Number(SH.tax)===8) base8 += amt; else base10 += amt; }
+  }
   const tax8 = Math.floor(base8*0.08), tax10 = Math.floor(base10*0.10);
-  return {lines, totalKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing};
+  return {lines, totalKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing, needShip};
 }
 /* 承認：社長の署名を確かめる */
 async function aprVerify(code){
@@ -2677,7 +2708,7 @@ function qtReqText(q, c){
   const me = recMe();
   const req = {t:"req", no:q.no, shop:q.shop.trim(), by:me?.name||"", items:c.disc.map(d=>({product:d.product, size:d.size, kind:d.kind, price:d.price, rule:d.rule})), kg:Math.round(c.totalKg*100)/100};
   return "【値引き承認のお願い】\n見積番号："+q.no+"\nお店："+req.shop+"\n担当："+req.by+"\n1回の量：約"+num(c.totalKg,1).replace(/\.0$/,"")+"kg\n"+
-    c.disc.map(d=>"・"+d.product+" "+d.size+"（"+procOf(d.kind)[1]+"）："+yen(d.rule)+" → "+yen(d.price)+"/kg").join("\n")+
+    c.disc.map(d=> d.kind==="ship" ? "・運賃をなしにしたい（標準 "+yen(d.rule)+"/個口）" : d.kind==="extra" ? "・"+d.product+"："+yen(d.rule)+" → "+yen(d.price) : "・"+d.product+" "+d.size+"（"+procOf(d.kind)[1]+"）："+yen(d.rule)+" → "+yen(d.price)+"/kg").join("\n")+
     "\n\n社長はこの文章をそのまま、MOGAMI PARTNER（社長用）の「見積書」→「値引きの承認」に貼り付けてください。\nMOGAMI-REQ:"+jEnc(req);
 }
 function qtText(q, c){
@@ -2754,13 +2785,14 @@ function quoteView(){
         field("お店の名前（宛名）", h("input",{class:"i shopname", id:"qt-shop", placeholder:"例：うなぎ処 ○○", value:q.shop, oninput:e=>{ q.shop = e.target.value; qtSave(); }, onchange:()=>render()})),
         field("ご担当者（任意）", h("input",{class:"i", id:"qt-person", placeholder:"例：店主 ○○", value:q.person, oninput:e=>{ q.person = e.target.value; qtSave(); }, onchange:()=>render()})))),
     items,
-    h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.items.push({id:rid(), product:"", size:"", kind:"live", qty:"", price:""}); })},"＋ 商品を追加")),
+    h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.items.push({id:rid(), product:"", size:"", kind:"live", qty:"", price:""}); })},"＋ うなぎを追加")),
+    qtExtrasEditor(q, c, upd),
     h("section",{class:"panel stack"}, field("備考（任意）", h("input",{class:"i", id:"qt-memo", placeholder:"例：納品は毎週火曜", value:q.memo, oninput:e=>{ q.memo = e.target.value; qtSave(); }, onchange:()=>render()})),
       h("p",{class:"small muted",style:"margin:0"}, "1回の量：活鰻 約"+num(c.totalKg,1).replace(/\.0$/,"")+"kg（"+tierLabel(c.tier)+"の価格で計算）"+(c.tier.note ? "　"+c.tier.note : ""))),
     c.missing ? h("div",{class:"banner warn"}, h("div",null,"商品・サイズ・数量がそろっていない行があります。")) : null,
     appr.need && !appr.ok ? h("section",{class:"panel stack",style:"border:2px solid var(--red)"},
       h("b",null,"値引きの承認が必要です"),
-      h("div",{class:"small"}, c.disc.map(d=>h("div",null,"・"+d.product+" "+d.size+"："+yen(d.rule)+" → "+yen(d.price)+"/kg"))),
+      h("div",{class:"small"}, c.disc.map(d=>h("div",null, d.kind==="ship" ? "・運賃をなしにする（標準 "+yen(d.rule)+"/個口）" : d.kind==="extra" ? "・"+d.product+"："+yen(d.rule)+" → "+yen(d.price) : "・"+d.product+" "+d.size+"："+yen(d.rule)+" → "+yen(d.price)+"/kg"))),
       h("div",{class:"small muted"},"社長が承認すると、LINEで承認のリンクが届きます。リンクを開くと、この見積書が出せるようになります。"),
       reqText ? h("div",{class:"row"}, lineButton(reqText, "社長に承認を依頼（LINE）"), copyButton(reqText, "文章をコピー")) : h("div",{class:"banner warn"},"お店の名前と商品をそろえると依頼できます。"),
       h("details",{class:"x"}, h("summary",null,"社長からの返事を貼り付ける（リンクが開けない時）"),
@@ -2771,8 +2803,54 @@ function quoteView(){
       h("button",{class:"btn primary", disabled: blocked || !ready, onclick:()=>savePdf({title:"御見積書 "+q.shop.trim(), node:qtDoc(q, c, appr), file:"御見積書_"+q.shop.trim().replace(/[\\/:*?"<>|\s]+/g,"")+"_"+q.no+".pdf", after:()=>qtRecord(q)})}, "見積書をPDFにする"),
       blocked || !ready ? null : h("a",{class:"btn line", href:lineUrl(qtText(q, c)), target:"_blank", rel:"noopener", onclick:()=>{ lineBackupCopy(qtText(q, c)); qtRecord(q); }}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "文章でLINEに送る")),
     h("section",{class:"sec"}, h("h2",null,"見積書のプレビュー"), h("div",{class:"qprev"}, qtDoc(q, c, appr))),
+    S.isOwner ? extrasOwnerPanel() : null,
     S.isOwner ? aprOwnerPanel() : null,
     S.isOwner ? qtOwnerList() : null);
+}
+
+/* 見積書：うなぎ以外（付属品）と運賃の入力 */
+function qtExtrasEditor(q, c, upd){
+  if (!q.extras) q.extras = [];
+  const EX = getExtras(), SH = getShip();
+  const rows = q.extras.map((it, i)=>{
+    const m = EX.find(x=>x.id===it.eid), price = isNum(it.price) ? Number(it.price) : (m ? Number(m.price) : null), low = m && price!=null && price < Number(m.price);
+    const inp = (k, ph, mode) => h("input",{class:"i", id:"qx-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
+    return h("div",{class:"qitem"},
+      h("div",{class:"hd"}, h("b",null,"うなぎ以外 "+(i+1)), h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.extras = q.extras.filter(x=>x.id!==it.id); })},"消す")),
+      field("品目", h("select",{class:"i", onchange:e=>upd(()=>{ it.eid = e.target.value; it.price = ""; })}, [["","選んでください"], ...EX.map(x=>[x.id, x.name+"（"+yen(x.price)+"/"+x.unit+"・"+x.tax+"%）"])].map(([v,l])=>h("option",{value:v, selected:it.eid===v}, l)))),
+      m ? h("div",{class:"grid2"},
+        field("数量（"+m.unit+"）", inp("qty", "例：1")),
+        field("単価（円/"+m.unit+"・税抜）", inp("price", String(m.price), "numeric"), h("span",{class:"qhint"+(low ? " bad" : "")}, low ? "標準 "+yen(m.price)+" より安いので、社長の承認が必要です" : "標準 "+yen(m.price)+"。空欄なら標準の単価"))) : null);
+  });
+  return [h("section",{class:"sec"}, h("h2",{style:"font-size:16px"},"うなぎ以外（山椒・どじょう・串など）"), rows,
+      h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.extras.push({id:rid(), eid:"", qty:"", price:""}); })},"＋ うなぎ以外を追加"))),
+    c.needShip ? h("section",{class:"panel stack"},
+      h("b",null,"運賃（活鰻が"+SH.underKg+"kg未満のため）"),
+      h("div",{class:"grid2"},
+        field("個口", h("input",{class:"i", id:"qt-ship", type:"number", inputmode:"numeric", min:1, value:q.ship ?? "1", disabled:!!q.noShip, oninput:e=>{ q.ship = e.target.value; qtSave(); }, onchange:()=>render()}), "1個口 "+yen(SH.price)+"（税"+SH.tax+"%）"),
+        h("label",{class:"f"}, "運賃をなしにする", h("div",{class:"yn"}, h("button",{type:"button", class:"alt", "aria-pressed":String(!q.noShip), onclick:()=>upd(()=>{ q.noShip = false; })},"つける"), h("button",{type:"button", "aria-pressed":String(!!q.noShip), onclick:()=>upd(()=>{ q.noShip = true; })},"なし")),
+          h("span",{class:"hint"}, "なしにする時は、社長の承認が必要です")))) : null];
+}
+/* 社長：うなぎ以外の価格表を直す（claude.ai版） */
+function extrasOwnerPanel(){
+  const E = S.exDraft || (S.exDraft = {items:getExtras().map(x=>({...x})), ship:{...getShip()}});
+  const save = async () => {
+    const items = E.items.filter(x=>String(x.name||"").trim()).map(x=>({id:x.id||rid(), name:String(x.name).trim(), unit:String(x.unit||"").trim()||"個", price:toNum(x.price)??0, tax:Number(x.tax)===8 ? 8 : 10}));
+    const ship = {name:"運賃", unit:"個口", price:toNum(E.ship.price)??0, tax:Number(E.ship.tax)===8 ? 8 : 10, underKg:toNum(E.ship.underKg)??5};
+    if (await write(()=>S.db.doc("settings/extras").set({items, ship, updatedAt:nowIso(), updatedBy:S.uid}), "保存しました。社員の画面には次の自動更新（1日4回）で届きます")){ S.exDraft = null; render(); }
+  };
+  const cell = (o, k, type, w) => h("input",{class:"i", type:type||"text", inputmode:type==="number"?"numeric":null, style:w?"min-width:"+w:null, value:o[k]??"", oninput:e=>{ o[k] = e.target.value; }});
+  return h("details",{class:"x panel"}, h("summary",null,"うなぎ以外の価格表（社長用）"),
+    h("div",{class:"stack"},
+      h("p",{class:"small muted",style:"margin:0"},"単価は税抜。ここより安い単価で見積もる時は、社長の承認が必要になります。"),
+      E.items.map((x,i)=>h("div",{class:"qitem"},
+        h("div",{class:"grid2"}, field("品名", cell(x,"name")), field("単位", cell(x,"unit")), field("単価（円・税抜）", cell(x,"price","number")),
+          field("税率", h("select",{class:"i", onchange:e=>{ x.tax = Number(e.target.value); }}, [10,8].map(t=>h("option",{value:t, selected:Number(x.tax)===t}, t+"%"))))),
+        h("div",null, h("button",{class:"linkbtn", onclick:()=>{ E.items.splice(i,1); render(); }},"この品目を消す")))),
+      h("div",null, h("button",{class:"btn sm", onclick:()=>{ E.items.push({id:rid(), name:"", unit:"", price:"", tax:10}); render(); }},"＋ 品目を追加")),
+      h("div",{class:"qitem"}, h("b",null,"運賃"), h("div",{class:"grid2"}, field("1個口の単価（円・税抜）", cell(E.ship,"price","number")), field("この量（活鰻kg）未満で運賃をつける", cell(E.ship,"underKg","number")),
+        field("税率", h("select",{class:"i", onchange:e=>{ E.ship.tax = Number(e.target.value); }}, [10,8].map(t=>h("option",{value:t, selected:Number(E.ship.tax)===t}, t+"%")))))),
+      h("div",{class:"row"}, h("button",{class:"btn primary", onclick:save},"価格表を保存"), h("button",{class:"btn ghost", onclick:()=>{ S.exDraft = null; render(); }},"元に戻す"))));
 }
 /* ============ 値引きの承認（社長だけ） ============ */
 function aprOwnerPanel(){
@@ -2803,6 +2881,7 @@ function aprOwnerPanel(){
       h("div",{class:"small"}, "見積番号 "+r.no+"　／　"+r.shop+"　／　担当 "+r.by+"　／　約"+r.kg+"kg"),
       h("div",{class:"tablewrap"}, h("table",{class:"t"}, h("tr",null, ["商品","標準","希望","原価","粗利率"].map((t,i)=>h("th",{class:i?"num":null},t))),
         r.items.map(x=>{ const p = S.products.find(y=>y.name===x.product), c = p ? sizeCost(p, x.size) : null, m = c!=null && x.price ? (x.price-c)/x.price*100 : null;
+          if (x.kind==="extra" || x.kind==="ship") return h("tr",null, h("td",null, x.kind==="ship" ? "運賃をなしにする" : x.product), h("td",{class:"num"}, yen(x.rule)), h("td",{class:"num"}, h("b",null,yen(x.price))), h("td",{class:"num"},"—"), h("td",{class:"num"},"—"));
           return h("tr",null, h("td",null, x.product+" "+x.size+"（"+procOf(x.kind)[1]+"）"), h("td",{class:"num"}, yen(x.rule)), h("td",{class:"num"}, h("b",null,yen(x.price))), h("td",{class:"num"}, yen(c)),
             h("td",{class:"num"}, m==null ? "—" : h("span",{class:"pill "+(m>=getPricing().targetMargin ? "ok" : m>=getPricing().targetMargin*0.5 ? "warn" : "bad")}, num(m,1)+"%"))); }))),
       A.reply ? h("div",{class:"stack"}, h("div",{class:"banner info"}, h("div",null,"承認しました。担当者にLINEで送ってください。")), h("div",{class:"row"}, lineButton(A.reply, "担当者にLINEで送る"), copyButton(A.reply, "文章をコピー")))
@@ -2865,6 +2944,7 @@ async function unlockPub(){
     subs.push(db.collection("products").onSnapshot(q=>{ S.products = q.docs.map(d=>({id:d.id, ...normScale(d.data())})).sort((a,b)=>(a.demo?1:0)-(b.demo?1:0) || String(a.name).localeCompare(String(b.name),"ja")); scheduleRender(); }, onErr));
     subs.push(db.collection("customers").onSnapshot(q=>{ S.customers = q.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja")); scheduleRender(); }, onErr));
     subs.push(db.doc("settings/pricing").onSnapshot(d=>{ S.pricing = d.exists ? d.data() : null; if (!(document.activeElement && String(document.activeElement.id).startsWith("pr-"))) S.pDraft = null; scheduleRender(); }, onErr));
+    subs.push(db.doc("settings/extras").onSnapshot(d=>{ S.extras = d.exists ? d.data() : null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/weights").onSnapshot(d=>{ S.weights = d.exists ? d.data() : null; if (!S.wDraft || !document.activeElement || !String(document.activeElement.id).startsWith("w-")) S.wDraft = null; scheduleRender(); }, onErr));
     if (S.isOwner) subs.push(db.collection("access_requests").onSnapshot(q=>{ S.requests = q.docs.map(d=>({id:d.id, ...d.data()})); scheduleRender(); }, onErr));
   }

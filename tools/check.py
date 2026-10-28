@@ -21,6 +21,7 @@
      - 診断結果と原価計算の「LINEで送る」を押して、LINEの送信画面が文章つきで開くか
      - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
+     - 見積書：うなぎ以外（付属品）・運賃の税率別計算と、運賃なし・付属品値引きの承認
      - 営業記録：社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
@@ -224,6 +225,22 @@ if sync_playwright:
                 elif not r.get("en1"): bad("見積書：商品を入れても「PDFにする」が押せない")
                 elif r.get("en2"): bad("見積書：値引きしたのに承認なしで出せてしまう")
                 else: ok("見積書：計算・値引きの承認待ち")
+            # 見積書：うなぎ以外（付属品）と運賃
+            if pg.evaluate("()=>typeof getExtras==='function'"):
+                r = pg.evaluate("""()=>{ const ex = getExtras(), sh = getShip(); if (!ex.length) return {none:true};
+                  const e8 = ex.find(x=>Number(x.tax)===8), e10 = ex.find(x=>Number(x.tax)!==8);
+                  const q = qtBlank(); q.shop = "チェック用の店"; q.items = []; q.extras = [e8,e10].filter(Boolean).map((x,i)=>({id:"x"+i, eid:x.id, qty:"2", price:""}));
+                  const c = qtCalc(q), ship = c.lines.find(l=>l.name.startsWith(sh.name));
+                  const b8 = (e8 ? e8.price*2 : 0), b10 = (e10 ? e10.price*2 : 0) + Number(sh.price);
+                  const okSum = c.base8===b8 && c.base10===b10 && c.total===b8+b10+Math.floor(b8*0.08)+Math.floor(b10*0.1);
+                  q.noShip = true; const shipAppr = qtCalc(q).disc.some(d=>d.kind==="ship"); q.noShip = false;
+                  q.extras[0].price = String(Number(ex.find(x=>x.id===q.extras[0].eid).price)-10); const lowAppr = qtCalc(q).disc.some(d=>d.kind==="extra");
+                  return {okSum, ship:!!ship, shipAppr, lowAppr}; }""")
+                if r.get("none"): bad("見積書：うなぎ以外の価格表が空")
+                elif not r.get("ship"): bad("見積書：活鰻5kg未満なのに運賃がつかない")
+                elif not r.get("okSum"): bad("見積書：うなぎ以外・運賃の税率別の計算が合わない")
+                elif not (r.get("shipAppr") and r.get("lowAppr")): bad("見積書：運賃なし・付属品の値引きが承認なしで通ってしまう")
+                else: ok("見積書：うなぎ以外・運賃")
             if errors and not any("エラー" in x for x in problems):
                 bad("画面でエラーが出ている: " + errors[0][:160])
         b.close()
