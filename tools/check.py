@@ -22,7 +22,7 @@
      - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 見積書：うなぎ以外（付属品）・運賃の税率別計算と、運賃なし・付属品値引きの承認
-     - 営業記録：社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
+     - 営業記録：社員コードが違うと登録できないこと。正しいコードで社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
 import json, os, re, subprocess, sys, tempfile, threading, http.server, functools, urllib.parse
@@ -73,6 +73,15 @@ if _MASTER and m:
             _ab = "abcdefghjkmnpqrstuvwxyz23456789"; _h = hmac.new(_MASTER.encode(), ("mogami-pass:" + _period).encode(), hashlib.sha256).digest()
             _p = "".join(_ab[_h[i] % len(_ab)] + ("-" if i % 4 == 3 and i < 11 else "") for i in range(12))
             PASS_CANDIDATES = [_p] + ([PASS] if PASS else [])
+    except Exception: pass
+# 社員コード（見積書・営業記録の登録に必要）も親鍵から作る
+STAFF_CODE = ""
+if _MASTER:
+    try:
+        import hmac, hashlib
+        _sv = re.search(r"const STAFF_KEY = \{\"v\":\s*(\d+)", src)
+        _h = hmac.new(_MASTER.encode(), ("mogami-staff:v" + (_sv.group(1) if _sv else "1")).encode(), hashlib.sha256).digest()
+        STAFF_CODE = "".join("abcdefghjkmnpqrstuvwxyz23456789"[_h[i] % 31] for i in range(8))
     except Exception: pass
 try:
     from playwright.sync_api import sync_playwright
@@ -173,9 +182,15 @@ if sync_playwright:
                 if not entry.count(): bad("共有画面に「営業記録」の入口がない")
                 else:
                     entry.first.click(); pg.wait_for_timeout(300)
-                    pg.fill("#rec-name", "チェック 太郎"); pg.fill("#rec-pin", "0000")
-                    pg.locator("main button[type=submit]").first.click(); pg.wait_for_timeout(400)
-                    if not pg.locator('nav.tabs a[href="#record"]').count(): bad("営業記録：登録しても「営業記録」タブが出ない")
+                    # 社員だけ：社員コードが違うと登録できない
+                    pg.fill("#rec-name", "チェック 太郎"); pg.fill("#rec-pin", "0000"); pg.fill("#rec-code", "zzzz-zzzz")
+                    pg.locator("main button[type=submit]").first.click(); pg.wait_for_timeout(1500)
+                    if pg.locator("#rec-shop").count(): bad("営業記録：社員コードが違うのに登録できてしまう（社員以外も使える）")
+                    else: ok("営業記録：違う社員コードでは登録できない")
+                    pg.fill("#rec-name", "チェック 太郎"); pg.fill("#rec-pin", "0000"); pg.fill("#rec-code", STAFF_CODE)
+                    pg.locator("main button[type=submit]").first.click(); pg.wait_for_timeout(1500)
+                    if not STAFF_CODE: bad("営業記録：社員コードが分からない（MOGAMI_MASTER が未指定）")
+                    elif not pg.locator("#rec-shop").count(): bad("営業記録：正しい社員コードで登録できない")
                     else:
                         ok("営業記録：社員登録")
                         pg.fill("#rec-shop", "チェック用の店")

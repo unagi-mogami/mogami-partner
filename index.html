@@ -2111,7 +2111,7 @@ function installNudge(){
 const INSTALL_TEXT = "【MOGAMI アプリの入れ方】\n\n■iPhone\n①一緒に送ったアイコン画像を長押しして保存\n②このリンクを開いて「ショートカットを追加」\n" + SHORTCUT_URL + "\n③ショートカットアプリで「MOGAMI」を長押し→詳細→ホーム画面に追加→アイコンをタップ→写真を選択で①の画像→追加\n\n■Android\nChromeで下のリンクを開き、右上の︙→ホーム画面に追加\n" + APP_URL;
 /* 送るリンクには日付を付ける（LINEの中のブラウザが前に開いた古いページを出さないため） */
 const shareLink = () => { const d = new Date(), p = n => String(n).padStart(2,"0"); return PUBLIC_URL + "?v=" + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()); };
-const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・見積書・営業記録（社員の方。最初に一度だけ名前と暗証番号を登録）\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
+const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・見積書・営業記録（社員の方だけ。社長から届く社員コードで最初に一度登録）\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
 function stepList(items){ return h("ol",{class:"steplist"}, items.map(x=>h("li",null,x))); }
 function installView(){
   const ios = isIOS() || !isAndroid(), line = isLineApp();
@@ -2178,6 +2178,7 @@ function shareView(){
       h("div",{class:"banner info"}, h("div",null, "このリンク（独立版）を受け取った人は、合言葉を入れるとログインなしで診断と原価計算が使えます。社員として登録した人は、見積書・営業記録も使えます。仕入原価・粗利・顧客情報は表示されません。合言葉は別にLINEで送ってください。"))),
     STANDALONE ? null : h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社長用（このclaude.ai版）"),
       h("p",{class:"small",style:"margin:0"},"商品マスタ・価格ルール・顧客カルテの管理と、LINEで届いた内容の取り込みは、このclaude.ai版で行います。社員には送らないでください。")),
+    staffCodePanel(),
     S.isOwner ? backupPanel() : null);
 }
 function backupPanel(){
@@ -2211,9 +2212,47 @@ const recDb = () => !!(S.db && S.uid && !S.guest && role());
 function recMe(){
   if (recDb()) return {name: S.myStaff?.name || (S.isOwner ? "社長" : "社員"), uid: S.uid};
   const m = lsGet(REC_ME_KEY, null);
-  return m && m.name && m.pin ? m : null;
+  return m && m.name && m.pin && m.sk===STAFF_KEY.v ? m : null;   // 社員コードを入れて登録した端末だけ
 }
-const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", reg:{name:"", pin:""}, busy:false});
+/* ============ 社員コード（見積書・営業記録は社員だけ） ============ */
+/* 社員コードは親鍵から作り、社長の画面（claude.ai版の「共有」）にだけ表示する。アプリには答え合わせ用の値だけを入れる。
+   コードを変えるとき：v を上げ、親鍵から作り直した salt・hash に入れ替える（社員は登録し直し） */
+const STAFF_KEY = {"v": 1, "iter": 250000, "salt": "qrOXM+KvUM3XFKI+h7ytnQ==", "hash": "zTFIREPmBtRHXoh9tD1Y9XvNudp3K/CnvVnHU7jtbtk="};
+const normCode = s => String(s||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,"");
+async function staffCodeOk(code){
+  try {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(normCode(code)), "PBKDF2", false, ["deriveBits"]);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({name:"PBKDF2", hash:"SHA-256", salt:Uint8Array.from(atob(STAFF_KEY.salt), c=>c.charCodeAt(0)), iterations:STAFF_KEY.iter}, base, 256));
+    return btoa(String.fromCharCode(...bits)) === STAFF_KEY.hash;
+  } catch(e){ return false; }
+}
+/* 社長だけ：親鍵（data/users/me/sync_secret）から今の社員コードを作る */
+async function ownerStaffCode(){
+  const d = await S.db.collection("data/users/"+S.uid).doc("sync_secret").get();
+  const master = d.exists ? (d.data()||{}).master : null;
+  if (!master) throw new Error("鍵が見つかりません");
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(master), {name:"HMAC", hash:"SHA-256"}, false, ["sign"]);
+  const h = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("mogami-staff:v"+STAFF_KEY.v)));
+  const ab = "abcdefghjkmnpqrstuvwxyz23456789"; let s = "";
+  for (let i = 0; i < 8; i++) s += ab[h[i] % ab.length];
+  if (!(await staffCodeOk(s))) throw new Error("社員コードが合いません（親鍵が変わった可能性があります）");
+  return s.slice(0,4)+"-"+s.slice(4);
+}
+const staffCodeText = code => "【MOGAMI 社員コード】\n"+code+"\n\nアプリの「見積書」か「営業記録」を開いて、最初の登録で名前・暗証番号と一緒に入れてください。\n※社員専用です。お取引先さまには送らないでください。";
+function staffCodePanel(){
+  if (!S.isOwner || S.guest || STANDALONE) return null;
+  const st = S.staffCode || (S.staffCode = {code:"", err:"", busy:false});
+  const show = async () => { st.busy = true; st.err = ""; render();
+    try { st.code = await ownerStaffCode(); } catch(e){ st.err = "社員コードを出せませんでした（"+(e.message||"エラー")+"）"; }
+    st.busy = false; render(); };
+  return h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社員コード（社長のみ）"),
+    h("p",{class:"small",style:"margin:0"},"独立版の「見積書」「営業記録」は、このコードを入れて登録した人だけが使えます。社員にだけLINEで送ってください（お取引先さまには送らない）。"),
+    st.code ? h("div",{class:"stack",style:"gap:8px"}, h("div",{class:"formula",style:"font-size:20px;letter-spacing:.12em;font-weight:700"}, st.code),
+      h("div",{class:"row"}, lineButton(staffCodeText(st.code), "社員にLINEで送る"), copyButton(staffCodeText(st.code), "文章をコピー")))
+      : h("div",null, h("button",{class:"btn", disabled:st.busy, onclick:show}, st.busy ? "確認しています…" : "社員コードを表示する")),
+    st.err ? h("div",{class:"banner warn"}, h("div",null, st.err)) : null);
+}
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", reg:{name:"", pin:"", code:""}, busy:false});
 const ymKey = iso => String(iso||"").slice(0,7);
 async function recPost(rec){
   if (recDb() && rec.uid){ await S.db.collection("records").doc(rec.id).set(rec); return; }
@@ -2260,7 +2299,7 @@ function recEntryPanel(){
   if (!STANDALONE && !S.guest) return null;
   const me = recMe();
   return h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社員の方へ：営業記録"),
-    h("p",{class:"small",style:"margin:0"}, me ? me.name+" さんとして記録できます。" : "名前と暗証番号を一度登録すると、訪問・診断・見積・サンプル提供・成約を記録できます（お取引先さまは使いません）。"),
+    h("p",{class:"small",style:"margin:0"}, me ? me.name+" さんとして記録できます。" : "社長から届く社員コードと、名前・暗証番号を一度登録すると、見積書と、訪問・診断・見積・サンプル提供・成約の記録が使えます（社員専用です）。"),
     h("div",{class:"row"}, h("button",{class:"btn primary", onclick:()=>go("record")}, me ? "営業記録を開く" : "社員として登録する")));
 }
 /* 見積書・営業記録は、社員として一度登録してから使う（見積書の担当者名・実績の名前になる） */
@@ -2272,8 +2311,13 @@ function recRegisterView(forQuote){
       const name = g.name.trim().replace(/\s+/g," "), pin = String(g.pin).trim();
       if (!name) return toast("名前を入れてください");
       if (!/^\d{4}$/.test(pin)) return toast("暗証番号は数字4けたで入れてください");
-      if (!lsSet(REC_ME_KEY, {name, pin})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
-      R.reg = {name:"", pin:""}; toast(name+" さんで登録しました"); render(); }},
+      if (!normCode(g.code)) return toast("社員コードを入れてください");
+      if (R.busy) return; R.busy = true;
+      staffCodeOk(g.code).then(okc => { R.busy = false;
+        if (!okc) return toast("社員コードが違います。社長から届いたLINEを確認してください");
+        if (!lsSet(REC_ME_KEY, {name, pin, sk:STAFF_KEY.v})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
+        R.reg = {name:"", pin:"", code:""}; toast(name+" さんで登録しました"); render(); }); }},
+      field("社員コード", h("input",{class:"i", id:"rec-code", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(g,"code")}), "社長からLINEで届いた、社員専用のコードです。"),
       field("名前（フルネーム）", h("input",{class:"i", id:"rec-name", autocomplete:"name", placeholder:"例：山田 太郎", ...bind(g,"name")}), "社長が実績を見るときの名前です。毎回同じ名前にしてください。"),
       field("暗証番号（数字4けた）", h("input",{class:"i", id:"rec-pin", type:"password", inputmode:"numeric", maxlength:4, autocomplete:"off", placeholder:"••••", ...bind(g,"pin")}), "社長から伝えられた番号。ほかの人があなたの名前で記録できないようにするためのものです。"),
       h("div",null, h("button",{class:"btn primary", type:"submit"},"登録する"))),
