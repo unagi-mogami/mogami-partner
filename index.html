@@ -468,7 +468,7 @@ const S = {
   db:null, user:null, assets:null, uid:null, isOwner:false, myStaff:null, myReq:null, staff:{}, requests:[],
   products:[], customers:[], weights:null, readOnly:false, conn:"loading", route:"diagnose",
   diag:{step:0, ans:{}, customerId:"", need:"", showResult:false},
-  custId:null, custDraft:null, custNew:false, entryDrafts:{}, custQuery:"",
+  custId:null, custDraft:null, custNew:false, entryDrafts:{}, custQuery:"", prodQuery:"",
   prodEdit:null, prodDraft:null, confirm:null, reqDraft:{name:"", role:"sales"},
   sim:null, simCustomer:"", wDraft:null, staffDraft:{}
 };
@@ -477,8 +477,8 @@ const ROUTES = [
   {id:"customers", k:"客", l:"顧客カルテ", need:"custView"},
   {id:"products", k:"品", l:"商品マスタ", need:"prodView"},
   {id:"simulator", k:"算", l:"原価試算", need:"sim"},
-  {id:"quote", k:"見", l:"見積書", need:"rec", hidden:()=>!recMe()},
-  {id:"record", k:"録", l:"営業記録", need:"rec", hidden:()=>!recMe()},
+  {id:"quote", k:"見", l:"見積書", need:"rec"},
+  {id:"record", k:"録", l:"営業記録", need:"rec"},
   {id:"results", k:"績", l:"実績", need:"staff"},
   {id:"staff", k:"員", l:"社員", need:"staff"},
   {id:"share", k:"共", l:"共有", need:"*"},
@@ -517,6 +517,48 @@ function toast(msg){ const host=document.getElementById("toastHost"); host.repla
 function bind(obj, key, type){ return { value: obj[key] ?? "", oninput: e => { obj[key] = type==="num" ? (e.target.value==="" ? "" : e.target.value) : e.target.value; } }; }
 function field(label, input, hint){ return h("label",{class:"f"}, label, input, hint ? h("span",{class:"hint"},hint) : null); }
 function sel(obj, key, options, extra){ return h("select",{class:"i", ...bind(obj,key), onchange:e=>{obj[key]=e.target.value; extra&&extra(e);}}, options.map(([v,l])=>h("option",{value:v},l))); }
+/* ============ 検索 ============ */
+/* カタカナ／ひらがな、全角／半角、大文字／小文字の違いは気にせず探す。空白で区切ると、全部の言葉を含むものだけ */
+const normQ = s => String(s??"").normalize("NFKC").toLowerCase().replace(/[ァ-ヶ]/g, c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g," ").trim();
+/* 漢字は読みでも探せるように（産地・よく使う品名だけ） */
+const READS = {"宮崎":"みやざき","鹿児島":"かごしま","静岡":"しずおか","浜名湖":"はまなこ","愛知":"あいち","三河":"みかわ","一色":"いっしき","三重":"みえ","徳島":"とくしま","高知":"こうち",
+  "熊本":"くまもと","大分":"おおいた","中国":"ちゅうごく","広東":"かんとん","台湾":"たいわん","国産":"こくさん","県産":"けんさん","肝":"きも","串":"くし","山椒":"さんしょう","鯉":"こい",
+  "頭":"あたま","骨":"ほね","短冊":"たんざく","焼":"やき","冷凍":"れいとう","生":"なま","特大":"とくだい","小":"しょう","中":"ちゅう","大":"だい","運賃":"うんちん","付属品":"ふぞくひん","副産物":"ふくさんぶつ","活魚":"かつぎょ","艶鰻":"えんまん","和匠":"わしょう"};
+function matchQ(q, ...fields){
+  const t = normQ(q); if (!t) return true;
+  const raw = fields.flat(Infinity).filter(x=>x!=null).join(" ");
+  const hay = normQ(raw + " " + Object.keys(READS).filter(k=>raw.includes(k)).map(k=>READS[k]).join(" "));
+  return t.split(" ").every(w=>hay.includes(w));
+}
+function searchBox(id, value, placeholder, onInput){
+  return h("input",{class:"i", id, type:"search", enterkeyhint:"search", autocomplete:"off", placeholder, value, oninput:e=>onInput(e.target.value)});
+}
+/* 選ぶ欄に検索を付ける。items=[{v:値, l:表示, g:区分, k:検索用の言葉}]。
+   言葉を入れると、当てはまる商品がボタンで出る（押すと選べる）。下の選ぶ欄も当てはまるものだけになる */
+function searchPick({items, value, onPick, id, empty, placeholder}){
+  let q = "";
+  const selEl = h("select",{class:"i", id, onchange:e=>onPick(e.target.value)});
+  const hits = h("div",{class:"chip-row",style:"margin:0"});
+  const hint = h("span",{class:"qhint"});
+  const fill = () => {
+    const hit = items.filter(x=>matchQ(q, x.l, x.g, x.k));
+    const cur = items.find(x=>x.v===value);
+    const list = cur && !hit.includes(cur) ? [cur, ...hit] : hit;
+    const opt = x => h("option",{value:x.v, selected:x.v===value}, x.l);
+    const groups = [...new Set(list.map(x=>x.g||""))];
+    const kids = groups.some(Boolean) ? groups.map(g=> g ? h("optgroup",{label:g}, list.filter(x=>(x.g||"")===g).map(opt)) : list.filter(x=>!x.g).map(opt)) : list.map(opt);
+    selEl.replaceChildren(h("option",{value:"", selected:!value}, empty||"選んでください"), ...kids.flat());
+    const show = q.trim() ? hit.slice(0, 8) : [];
+    hits.replaceChildren(...show.map(x=>h("button",{type:"button","aria-pressed":String(x.v===value), onclick:()=>onPick(x.v)}, x.l)));
+    hits.hidden = !show.length;
+    hint.textContent = !q.trim() ? "" : !hit.length ? "見つかりません。言葉を短くしてみてください" : hit.length > show.length ? hit.length+"件あります（上から8件。言葉を足すとしぼれます）" : "押すと選べます";
+    hint.hidden = !hint.textContent;
+  };
+  fill();
+  return h("div",{class:"stack",style:"gap:6px"},
+    items.length > 1 ? searchBox(id ? id+"-q" : null, "", placeholder||"名前・産地で検索", v=>{ q = v; fill(); }) : null,
+    hits, hint, selEl);
+}
 async function write(fn, okMsg){
   try { await fn(); if (okMsg) toast(okMsg); return true; }
   catch(e){
@@ -585,7 +627,7 @@ function render(){
     view = ({diagnose:diagnoseView, customers:customersView, products:productsView, simulator:simulatorView, record:recordView, quote:quoteView, results:resultsView, staff:staffView, share:shareView, install:installView}[allowed] || (()=>h("div")))();
   }
   const top = role()==="guest"
-    ? h("div",{class:"banner info",style:"margin-bottom:14px"}, h("div",null, "ログインなしで使える「診断」と「原価計算」です。商品データは "+(PUB?.builtAt ? localDate(PUB.builtAt) : "—")+" 時点のものです。"+(STANDALONE ? "お店の情報は、結果画面の「社長にLINEで送る」で顧客カルテに登録できます。" : "記録の保存や顧客カルテは、社員としてログインすると使えます。")))
+    ? h("div",{class:"banner info",style:"margin-bottom:14px"}, h("div",null, "ログインなしで使える「診断」「原価計算」と、社員の方の「見積書」「営業記録」です。商品データは "+(PUB?.builtAt ? localDate(PUB.builtAt) : "—")+" 時点のものです。"+(STANDALONE ? "お店の情報は、結果画面の「社長にLINEで送る」で顧客カルテに登録できます。" : "記録の保存や顧客カルテは、社員としてログインすると使えます。")))
     : (S.readOnly && role() ? h("div",{class:"banner warn",style:"margin-bottom:14px"},"閲覧専用で開いています。編集するには、管理者に共有レベル（コントリビューター以上）を確認してもらってください。") : "");
   main.replaceChildren(verBanner(), top, ownerSnapNotice(), installNudge(), view);
 }
@@ -1209,7 +1251,7 @@ function customersView(){
   return wrap;
   function custGrid(){
     const q2 = S.custQuery.trim();
-    const l = S.customers.filter(c => !q2 || [c.name,c.contactPerson,c.phone].join(" ").includes(q2));
+    const l = S.customers.filter(c => matchQ(q2, c.name, c.contactPerson, c.phone));
     if (!S.customers.length) return h("div",{class:"panel",id:"cust-grid"}, h("h3",null,"まだ顧客が登録されていません"), h("p",{class:"muted"},"「新規登録」から店舗名と調理方法を入れるところから始めてください。"));
     if (!l.length) return h("p",{class:"muted",id:"cust-grid"},"該当する顧客がいません。");
     return h("div",{class:"cards",id:"cust-grid"}, l.map(c=>{
@@ -1327,9 +1369,24 @@ function productsView(){
   if (demoCount) wrap.append(h("div",{class:"banner warn"}, h("div",{style:"flex:1"},"架空データが "+demoCount+" 件あります（名前に【架空】・点線バッジ）。実際の商品を登録したら削除してください。"),
     can("prodEdit") ? deleteControl("demo-all","架空データを一括削除", async()=>{ for (const p of S.products.filter(x=>x.demo)) await write(()=>S.db.doc("products/"+p.id).delete()); toast("架空データを削除しました"); }) : null));
   if (!S.products.length) wrap.append(h("div",{class:"panel"}, h("h3",null,"商品が登録されていません"), h("p",{class:"muted"},"「商品を登録」から、産地・サイズ・味・脂・皮・身質・在庫などを入れてください。")));
-  wrap.append(h("div",{class:"tablewrap"}, h("table",{class:"t"},
+  /* 検索：うなぎ・うなぎ以外の両方の一覧をしぼる（入力中は一覧だけ描き直し、文字入力が途切れないようにする） */
+  wrap.append(searchBox("prod-q", S.prodQuery||"", "商品名・産地・区分で検索（例：かぐや、宮崎、肝）", v=>{ S.prodQuery = v;
+    for (const [id, fn] of [["prod-table", prodTable], ["ex-table", exTable]]){ const el = document.getElementById(id); if (el) el.replaceWith(fn()); } }));
+  wrap.append(prodTable());
+  wrap.append(extrasMasterSection());
+  if (can("pricing")) wrap.append(pricingPanel());
+  else wrap.append(h("details",{class:"x"}, h("summary",null,"発注量別の販売単価ルール（参照）"), tierRuleTable()));
+  if (can("weights")) wrap.append(weightsPanel());
+  else wrap.append(h("details",{class:"x"}, h("summary",null,"推薦の配点（参照）"), weightsTable(false)));
+  return wrap;
+}
+const prodHit = p => matchQ(S.prodQuery, p.name, p.origin, p.brand, p.sizes);
+function prodTable(){
+  const list = S.products.filter(prodHit);
+  if (S.products.length && !list.length) return h("p",{class:"muted",id:"prod-table"},"うなぎ：「"+S.prodQuery.trim()+"」に当てはまる商品はありません。");
+  return h("div",{class:"tablewrap",id:"prod-table"}, h("table",{class:"t"},
     h("tr",null, ["商品名","産地","サイズ","味","脂","皮","身質","タレ", can("costView")?"原価/kg":null, "販売単価（小口）","在庫","供給","品質",""].filter(x=>x!==null).map(x=>h("th",{class: /kg|単価/.test(x)?"num":null},x))),
-    S.products.map(p=>{ const [sl,sc]=supplyLabel(p); const unk = v => v===""||v==null ? h("span",{class:"pill warn"},"要確認") : v;
+    list.map(p=>{ const [sl,sc]=supplyLabel(p); const unk = v => v===""||v==null ? h("span",{class:"pill warn"},"要確認") : v;
       return h("tr",null,
         h("td",null, h("b",null,p.name), p.demo ? h("div",null,h("span",{class:"pill demo"},"架空")) : null),
         h("td",null, unk(p.origin)),
@@ -1340,13 +1397,7 @@ function productsView(){
         h("td",{class:"num"}, stockCell(p)),
         h("td",null, h("span",{class:"pill "+sc},sl)), h("td",null, isNum(p.quality)? p.quality+"/5" : unk("")),
         h("td",null, can("prodEdit") ? h("div",{class:"row",style:"gap:6px;flex-wrap:nowrap"}, h("button",{class:"btn sm", onclick:()=>openProduct(p)},"編集"), h("button",{class:"btn sm ghost", onclick:()=>duplicateProduct(p)},"複製")) : null));
-    }))));
-  wrap.append(extrasMasterSection());
-  if (can("pricing")) wrap.append(pricingPanel());
-  else wrap.append(h("details",{class:"x"}, h("summary",null,"発注量別の販売単価ルール（参照）"), tierRuleTable()));
-  if (can("weights")) wrap.append(weightsPanel());
-  else wrap.append(h("details",{class:"x"}, h("summary",null,"推薦の配点（参照）"), weightsTable(false)));
-  return wrap;
+    })));
 }
 function stockCell(p){
   const sz = p.sizes||[];
@@ -1793,7 +1844,9 @@ function simCompareView(){
     var ai = simAutoPrice(s, pk);
     form.append(h("div",{class:"stack",style:"gap:8px;padding-bottom:12px;border-bottom:1px solid var(--line)"},
       h("div",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"提案するもがみの商品（選ぶと提案価格に自動で入ります）"),
-      h("div",{class:"grid2"}, sel(pk,"pid",[["","商品を選択"], ...S.products.map(p=>[p.id,p.name])], ()=>{ s.newPrice.manual = false; const p = S.products.find(x=>x.id===pk.pid); if (p && p.sizes?.length && !p.sizes.includes(s.size.v)) s.size.v = p.sizes[0]; render(); }),
+      h("div",{class:"grid2"}, searchPick({id:"sim-pick-pid", value:pk.pid||"", empty:"商品を選択", placeholder:"商品名・産地で検索",
+          items:S.products.map(p=>({v:p.id, l:p.name, k:[p.origin, p.brand, p.sizes]})),
+          onPick:v=>{ pk.pid = v; s.newPrice.manual = false; const p = S.products.find(x=>x.id===pk.pid); if (p && p.sizes?.length && !p.sizes.includes(s.size.v)) s.size.v = p.sizes[0]; render(); }}),
         h("input",{class:"i", id:"sim-pick-kg", type:"number", inputmode:"decimal", placeholder:"1回の発注量（kg）", ...bind(pk,"kg"), onchange:()=>render()})),
       h("div",{class:"small",id:"sim-auto"}, simAutoNote(s, ai))));
   }
@@ -2058,7 +2111,7 @@ function installNudge(){
 const INSTALL_TEXT = "【MOGAMI アプリの入れ方】\n\n■iPhone\n①一緒に送ったアイコン画像を長押しして保存\n②このリンクを開いて「ショートカットを追加」\n" + SHORTCUT_URL + "\n③ショートカットアプリで「MOGAMI」を長押し→詳細→ホーム画面に追加→アイコンをタップ→写真を選択で①の画像→追加\n\n■Android\nChromeで下のリンクを開き、右上の︙→ホーム画面に追加\n" + APP_URL;
 /* 送るリンクには日付を付ける（LINEの中のブラウザが前に開いた古いページを出さないため） */
 const shareLink = () => { const d = new Date(), p = n => String(n).padStart(2,"0"); return PUBLIC_URL + "?v=" + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()); };
-const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・社員の方は「共有」→「社員として登録する」で、見積書・営業記録も使えます\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
+const STANDALONE_INSTALL_TEXT = () => "【MOGAMI PARTNER（株式会社もがみ）】\n" + shareLink() + "\n\nリンクを開くと、ログインなしで使えます。\n・うなぎ診断（お店に合ううなぎのご提案）\n・原価計算\n・見積書・営業記録（社員の方。最初に一度だけ名前と暗証番号を登録）\n\n■合言葉\n最初に合言葉を入れてください。合言葉は社長からLINEでお知らせします（毎月はじめに変わります）。\n\n■ホーム画面に置く\niPhone：Safariで開く→共有ボタン→ホーム画面に追加\nAndroid：Chromeで開く→右上の︙→ホーム画面に追加\n\n■前の画面が出る時\n画面の上に「新しい版があります」と出たら「更新する」を押してください。出ない時は、ホーム画面のアイコンを消して、このリンクから入れ直してください。";
 function stepList(items){ return h("ol",{class:"steplist"}, items.map(x=>h("li",null,x))); }
 function installView(){
   const ios = isIOS() || !isAndroid(), line = isLineApp();
@@ -2210,10 +2263,11 @@ function recEntryPanel(){
     h("p",{class:"small",style:"margin:0"}, me ? me.name+" さんとして記録できます。" : "名前と暗証番号を一度登録すると、訪問・診断・見積・サンプル提供・成約を記録できます（お取引先さまは使いません）。"),
     h("div",{class:"row"}, h("button",{class:"btn primary", onclick:()=>go("record")}, me ? "営業記録を開く" : "社員として登録する")));
 }
-function recRegisterView(){
+/* 見積書・営業記録は、社員として一度登録してから使う（見積書の担当者名・実績の名前になる） */
+function recRegisterView(forQuote){
   const R = recState(), g = R.reg;
   return h("div",{class:"stack",style:"max-width:520px"},
-    h("div",{class:"pagehead"}, h("h1",null,"営業記録の登録"), h("p",null,"もがみの社員の方だけが使います。最初に一度だけ登録してください。")),
+    h("div",{class:"pagehead"}, h("h1",null, forQuote ? "見積書を出すには社員登録" : "営業記録の登録"), h("p",null, forQuote ? "見積書は、もがみの社員の方が使います。見積書に担当者として名前が入るので、最初に一度だけ登録してください。" : "もがみの社員の方だけが使います。最初に一度だけ登録してください。")),
     h("form",{class:"panel stack", onsubmit:e=>{ e.preventDefault();
       const name = g.name.trim().replace(/\s+/g," "), pin = String(g.pin).trim();
       if (!name) return toast("名前を入れてください");
@@ -2775,6 +2829,7 @@ function qtRecord(q){
   recAdd({kind:"quote", shop:snap.shop, quote:snap});
 }
 function quoteView(){
+  if (!recMe()) return recRegisterView(true);
   const q = qtGet(), c = qtCalc(q), appr = qtApproval(q, c), me = recMe();
   const upd = (fn, rr) => { fn(); qtSave(); if (rr!==false) render(); };
   const prods = (S.products||[]).filter(p=>p.sizes && p.sizes.length);
@@ -2786,7 +2841,9 @@ function quoteView(){
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qt-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"商品 "+(i+1)), q.items.length > 1 ? h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.items = q.items.filter(x=>x.id!==it.id); })},"この商品を消す") : null),
-      field("商品", h("select",{class:"i", onchange:e=>upd(()=>{ it.product = e.target.value; it.size = ""; it.price = ""; })}, [["","選んでください"], ...prods.map(x=>[x.name,x.name])].map(([v,l])=>h("option",{value:v, selected:it.product===v}, l)))),
+      field("商品", searchPick({id:"qt-"+it.id+"-product", value:it.product, placeholder:"商品名・産地で検索（例：かぐや、宮崎）",
+        items:prods.map(x=>({v:x.name, l:x.name, k:[x.origin, x.brand, x.sizes]})),
+        onPick:v=>upd(()=>{ if (it.product!==v){ it.product = v; it.size = ""; it.price = ""; } })})),
       p ? field("サイズ", h("select",{class:"i", onchange:e=>upd(()=>{ it.size = e.target.value; it.price = ""; })}, [["","選んでください"], ...p.sizes.map(z=>[z,z])].map(([v,l])=>h("option",{value:v, selected:it.size===v}, l)))) : null,
       h("div",{class:"seg c4", role:"radiogroup","aria-label":"加工"}, PROC.map(([k,l,f])=>h("button",{type:"button", role:"radio","aria-checked":String(it.kind===k), onclick:()=>upd(()=>{ it.kind = k; it.qty = ""; })}, h("b",{style:"font-size:14px"}, l.replace("加工","")), h("small",null, f ? "＋"+yen(f)+"/kg" : "加工なし")))),
       h("div",{class:"grid2"},
@@ -2837,8 +2894,9 @@ function qtExtrasEditor(q, c, upd){
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qx-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"うなぎ以外 "+(i+1)), h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.extras = q.extras.filter(x=>x.id!==it.id); })},"消す")),
-      field("品目", h("select",{class:"i", onchange:e=>upd(()=>{ it.eid = e.target.value; it.price = ""; })}, h("option",{value:""},"選んでください"),
-        EXTRA_CATS.map(cg=>{ const xs = EX.filter(x=>extraCat(x)===cg); return xs.length ? h("optgroup",{label:cg}, xs.map(x=>h("option",{value:x.id, selected:it.eid===x.id}, x.name+"（"+yen(x.price)+"/"+x.unit+"・"+x.tax+"%）"))) : null; }))),
+      field("品目", searchPick({id:"qx-"+it.id+"-eid", value:it.eid, placeholder:"品名・区分で検索（例：肝、串、山椒）",
+        items:EXTRA_CATS.flatMap(cg=>EX.filter(x=>extraCat(x)===cg).map(x=>({v:x.id, l:x.name+"（"+yen(x.price)+"/"+x.unit+"・"+x.tax+"%）", g:cg}))),
+        onPick:v=>upd(()=>{ if (it.eid!==v){ it.eid = v; it.price = ""; } })})),
       m ? h("div",{class:"grid2"},
         field("数量（"+m.unit+"）", inp("qty", "例：1")),
         field("単価（円/"+m.unit+"・税抜）", inp("price", String(m.price), "numeric"), h("span",{class:"qhint"+(low ? " bad" : "")}, low ? "標準 "+yen(m.price)+" より安いので、社長の承認が必要です" : "標準 "+yen(m.price)+"。空欄なら標準の単価"))) : null);
@@ -2864,12 +2922,19 @@ function extrasMasterSection(){
   return h("section",{class:"sec"},
     h("div",{class:"pagehead",style:"margin:8px 0 0"}, h("h2",{style:"font-size:20px"},"うなぎ以外の商品"), h("p",null,"見積書の「うなぎ以外」に出る商品です。単価は税抜。"),
       edit ? h("div",{class:"act"}, h("button",{class:"btn primary", onclick:()=>{ S.exDraft = {items:getExtras().map(x=>({...x, cat:extraCat(x), cost: cost[x.id] ?? ""})), ship:{...getShip()}}; render(); }},"＋ 追加・編集")) : null),
-    h("div",{class:"tablewrap"}, h("table",{class:"t"},
-      h("tr",null, ["品名","区分","単位","販売単価","税率", showCost ? "原価" : null, showCost ? "粗利率" : null].filter(x=>x!==null).map((t,i)=>h("th",{class: i>=3 && t!=="税率" ? "num" : null}, t))),
-      EXTRA_CATS.flatMap(cg=>EX.filter(x=>extraCat(x)===cg).map(x=>h("tr",null, h("td",null,h("b",null,x.name)), h("td",null,cg), h("td",null,x.unit), h("td",{class:"num"}, yen(x.price)), h("td",null, x.tax+"%"),
-        showCost ? h("td",{class:"num"}, isNum(cost[x.id]) ? yen(cost[x.id]) : h("span",{class:"pill warn"},"未登録")) : null,
-        showCost ? h("td",{class:"num"}, mg(x)==null ? "—" : h("span",{class:"pill "+(mg(x)>=getPricing().targetMargin ? "ok" : mg(x)>=getPricing().targetMargin*0.5 ? "warn" : "bad")}, num(mg(x),1)+"%")) : null))))),
+    exTable(),
     h("p",{class:"small muted",style:"margin:0"}, "運賃：宅配便で活鰻"+SH.underKg+"kg未満のとき 1個口 "+yen(SH.price)+"（税"+SH.tax+"%）"));
+}
+function exTable(){
+  const EX = getExtras(), cost = S.extrasCost?.map || {}, showCost = can("costView");
+  const mg = x => { const c = toNum(cost[x.id]); return c!=null && Number(x.price) > 0 ? (Number(x.price)-c)/Number(x.price)*100 : null; };
+  const list = EX.filter(x=>matchQ(S.prodQuery, x.name, extraCat(x), x.unit));
+  if (!list.length) return h("p",{class:"muted",id:"ex-table"},"うなぎ以外：「"+String(S.prodQuery||"").trim()+"」に当てはまる商品はありません。");
+  return h("div",{class:"tablewrap",id:"ex-table"}, h("table",{class:"t"},
+      h("tr",null, ["品名","区分","単位","販売単価","税率", showCost ? "原価" : null, showCost ? "粗利率" : null].filter(x=>x!==null).map((t,i)=>h("th",{class: i>=3 && t!=="税率" ? "num" : null}, t))),
+      EXTRA_CATS.flatMap(cg=>list.filter(x=>extraCat(x)===cg).map(x=>h("tr",null, h("td",null,h("b",null,x.name)), h("td",null,cg), h("td",null,x.unit), h("td",{class:"num"}, yen(x.price)), h("td",null, x.tax+"%"),
+        showCost ? h("td",{class:"num"}, isNum(cost[x.id]) ? yen(cost[x.id]) : h("span",{class:"pill warn"},"未登録")) : null,
+        showCost ? h("td",{class:"num"}, mg(x)==null ? "—" : h("span",{class:"pill "+(mg(x)>=getPricing().targetMargin ? "ok" : mg(x)>=getPricing().targetMargin*0.5 ? "warn" : "bad")}, num(mg(x),1)+"%")) : null)))));
 }
 function extrasEditor(){
   const E = S.exDraft, showCost = can("costView");
