@@ -278,70 +278,15 @@ details.memo>summary{font-size:12px;color:var(--muted);font-weight:500}
 .lineicon{font-size:10px;font-weight:800;letter-spacing:.02em;background:#fff;color:#06C755;border-radius:5px;padding:1px 4px}
 .matrix td,.matrix th{text-align:center!important}
 .matrix td:first-child,.matrix th:first-child{text-align:left!important}
-/* 表が画面幅に入らないとき（スマホ・iPad縦など）は、1行を1枚のカードにして縦スクロールだけで読めるようにする */
-.tablewrap.stacked{overflow:visible;border:0;background:none;border-radius:0}
-.tablewrap.stacked table.t{min-width:0!important;display:block}
-.tablewrap.stacked tbody{display:block}
-.tablewrap.stacked tr{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 14px 10px;margin-bottom:10px}
-.tablewrap.stacked tr.hdr{display:none}
-.tablewrap.stacked td{display:block;position:relative;min-height:1.6em;border:0;padding:5px 0 5px min(36%,10em);text-align:left!important;overflow-wrap:anywhere}
-.tablewrap.stacked td::before{content:attr(data-label);position:absolute;left:0;top:7px;width:calc(min(36%,10em) - 10px);color:var(--muted);font-size:12px;font-weight:700;line-height:1.4}
-.tablewrap.stacked td[data-label=""]{padding-left:0}
-.tablewrap.stacked td[data-label=""]::before{display:none}
-.tablewrap.stacked td:first-child{display:block;font-weight:700;font-size:15px;padding:4px 0 8px;margin-bottom:4px;border-bottom:1px solid var(--line)}
-.tablewrap.stacked td:first-child::before{display:none}
-.tablewrap.stacked td:empty{display:none}
-.tablewrap.stacked td .row{justify-content:flex-start!important}
-.tablewrap.stacked td b{white-space:nowrap}
-.tablewrap.stacked td .row>b{min-width:2.8em}
-/* タブは折り返して全部見えるように */
-.tabbar{flex-wrap:wrap;overflow-x:visible}
-.tabbar button{flex:1 1 auto;white-space:normal;line-height:1.35;padding:8px 12px;text-align:center}
-/* 印刷・PDF：画面の操作部品を外した「控え」を作って印刷する */
-#print-area{display:none}
-.pdfsheet{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));background:rgba(0,0,0,.35)}
-.pdfsheet .panel{max-width:520px;margin:0 auto;box-shadow:0 -4px 20px rgba(0,0,0,.2)}
-.printval{display:inline-block;min-width:4em;padding:2px 8px;border-bottom:1px solid var(--line);font-weight:700}
-.print-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:14px;font-size:12px}
-.print-head b{font-family:var(--f-display);font-size:16px;letter-spacing:.1em}
-/* 印刷の控えは詰めて、なるべく1ページに収める */
-#print-area{font-size:10.5px;line-height:1.45}
-#print-area .print-head{margin-bottom:8px}
-#print-area h1{font-size:17px} #print-area h2{font-size:13px} #print-area h3{font-size:12px}
-#print-area .pagehead{margin-bottom:4px;gap:4px} #print-area .pagehead p{font-size:10px}
-#print-area .stack{gap:6px} #print-area .panel{padding:7px 10px}
-#print-area .grid2{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px}
-#print-area label.f{font-size:10px;gap:0}
-#print-area .printval{padding:0 4px;min-width:0;font-size:11px}
-#print-area .recs{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-#print-area .rec{padding:8px;gap:5px} #print-area .rec h3{font-size:13px}
-#print-area .score b{font-size:24px} #print-area .est{padding:6px 8px} #print-area .est-v{font-size:16px} #print-area .est-s{font-size:11px}
-#print-area .meta{font-size:10px} #print-area .list{font-size:10px} #print-area .pill{font-size:9px;padding:0 6px}
-#print-area .tablewrap{border-radius:4px} #print-area table.t{font-size:10px;min-width:0} #print-area table.t th,#print-area table.t td{padding:3px 6px}
-#print-area .sim{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px} #print-area .sim.one{grid-template-columns:minmax(0,1fr)}
-#print-area .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px} #print-area .kpi{padding:6px 8px} #print-area .kpi .v{font-size:16px}
-#print-area .cmp{gap:6px} #print-area .cmp .b{height:13px;font-size:9px}
-#print-area .formula{font-size:9px;line-height:1.5;padding:6px 8px}
-#print-area .opts{gap:4px} #print-area .opt{min-height:0;padding:4px 8px}
-@media print{
-  @page{margin:10mm}
-  html.printing body>*:not(#print-area){display:none!important}
-  html.printing #print-area{display:block}
-  html,body{background:#fff!important;color:#000}
-  #print-area .kpi,#print-area .est,#print-area .tablewrap.stacked tr{break-inside:avoid}
-  #print-area *{box-shadow:none!important}
-}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
-<script id="pub-data" type="application/json">{"enc":1,"period":"2026-10","iter":250000,"salt":"Sfi/tAfX540Mr4i1OCAgIg==","iv":"BbsRFmnxyNDLPQeL","ct":"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"}</script>
+<script id="pub-data" type="application/json">{"v":1,"products":[{"id":"demo-02","name":"愛知県三河産　艶鰻（えんまん）","origin":"愛知県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":2,"oil":5,"skin":1,"flesh":1,"cookFit":{"kansai":5,"kanto":4,"other":5},"supply":4,"quality":5,"brand":4,"luxury":5,"uniform":4,"domestic":true,"sakiYield":83,"shiroYield":63,"seasonYield":[],"weeklyCap":1000,"v":2,"bySize":{"3P":{"avail":true},"3.5P":{"avail":true},"4P":{"avail":true},"4.5P":{"avail":true},"5P":{"avail":true},"5.5P":{"avail":true},"6P":{"avail":false}},"_sell":{"3P":[{"lo":4300,"hi":4300},{"lo":3950,"hi":3950},{"lo":3650,"hi":3650},{"lo":3550,"hi":3550}],"3.5P":[{"lo":4600,"hi":4600},{"lo":4250,"hi":4250},{"lo":3950,"hi":3950},{"lo":3800,"hi":3800}],"4P":[{"lo":4950,"hi":4950},{"lo":4550,"hi":4550},{"lo":4250,"hi":4250},{"lo":4100,"hi":4100}],"4.5P":[{"lo":5100,"hi":5100},{"lo":4650,"hi":4650},{"lo":4350,"hi":4350},{"lo":4200,"hi":4200}],"5P":[{"lo":5200,"hi":5200},{"lo":4800,"hi":4800},{"lo":4450,"hi":4450},{"lo":4300,"hi":4300}],"5.5P":[{"lo":5200,"hi":5200},{"lo":4800,"hi":4800},{"lo":4450,"hi":4450},{"lo":4300,"hi":4300}],"6P":[{"lo":5200,"hi":5200},{"lo":4800,"hi":4800},{"lo":4450,"hi":4450},{"lo":4300,"hi":4300}]}},{"id":"demo-03","name":"愛知県三河産（オス)","origin":"愛知県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":5,"oil":4,"skin":3,"flesh":2,"cookFit":{"kansai":4,"kanto":4,"other":4},"supply":4,"quality":4,"brand":3,"luxury":3,"uniform":4,"domestic":true,"sakiYield":82.5,"shiroYield":62.5,"seasonYield":[{"label":"新仔","months":[6,7],"saki":85,"shiro":68}],"weeklyCap":1000,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":true},"4.5P":{"avail":true},"5P":{"avail":true},"5.5P":{"avail":true},"6P":{"avail":false}},"_sell":{"3P":[{"lo":4300,"hi":4300},{"lo":3950,"hi":3950},{"lo":3650,"hi":3650},{"lo":3550,"hi":3550}],"3.5P":[{"lo":4600,"hi":4600},{"lo":4250,"hi":4250},{"lo":3950,"hi":3950},{"lo":3800,"hi":3800}],"4P":[{"lo":4700,"hi":4700},{"lo":4300,"hi":4300},{"lo":4000,"hi":4000},{"lo":3850,"hi":3850}],"4.5P":[{"lo":4750,"hi":4750},{"lo":4350,"hi":4350},{"lo":4050,"hi":4050},{"lo":3950,"hi":3950}],"5P":[{"lo":4800,"hi":4800},{"lo":4400,"hi":4400},{"lo":4100,"hi":4100},{"lo":4000,"hi":4000}],"5.5P":[{"lo":4800,"hi":4800},{"lo":4400,"hi":4400},{"lo":4100,"hi":4100},{"lo":4000,"hi":4000}],"6P":[{"lo":4800,"hi":4800},{"lo":4400,"hi":4400},{"lo":4100,"hi":4100},{"lo":4000,"hi":4000}]}},{"id":"513yr9hr2ffvnvj0ed0n","name":"宮崎県産　和匠","origin":"宮崎県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":3,"skin":2,"flesh":1,"cookFit":{"kansai":4,"kanto":4,"other":4},"supply":2,"quality":4,"brand":4,"luxury":4,"uniform":4,"domestic":true,"sakiYield":80,"shiroYield":60,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-08","name":"宮崎県産（オス）","origin":"宮崎県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":5,"oil":3,"skin":3,"flesh":3,"cookFit":{"kansai":2,"kanto":4,"other":4},"supply":4,"quality":4,"brand":4,"luxury":3,"uniform":3,"domestic":true,"sakiYield":82,"shiroYield":62,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":true},"4P":{"avail":true},"4.5P":{"avail":true},"5P":{"avail":true},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[{"lo":4950,"hi":4950},{"lo":4550,"hi":4550},{"lo":4250,"hi":4250},{"lo":4100,"hi":4100}],"4.5P":[{"lo":5000,"hi":5000},{"lo":4600,"hi":4600},{"lo":4300,"hi":4300},{"lo":4150,"hi":4150}],"5P":[{"lo":5100,"hi":5100},{"lo":4650,"hi":4650},{"lo":4350,"hi":4350},{"lo":4200,"hi":4200}],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"821rnlckaxwh176lgl15","name":"宮崎県産（メス）","origin":"宮崎県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":4,"skin":2,"flesh":2,"cookFit":{"kansai":4,"kanto":4,"other":4},"supply":3,"quality":4,"brand":3,"luxury":3,"uniform":4,"domestic":true,"sakiYield":80,"shiroYield":60,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-05","name":"三重県産","origin":"三重県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":4,"oil":3,"skin":2,"flesh":1,"cookFit":{"kansai":4,"kanto":4,"other":4},"supply":1,"quality":5,"brand":3,"luxury":4,"uniform":2,"domestic":true,"sakiYield":83,"shiroYield":63,"seasonYield":[],"weeklyCap":null,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-07","name":"鹿児島県産（オス）","origin":"鹿児島県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":1,"skin":5,"flesh":5,"cookFit":{"kansai":2,"kanto":5,"other":3},"supply":5,"quality":4,"brand":4,"luxury":4,"uniform":4,"domestic":true,"sakiYield":83,"shiroYield":63,"seasonYield":[],"weeklyCap":100,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-01","name":"鹿児島県産（メス）","origin":"鹿児島県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":3,"skin":3,"flesh":2,"cookFit":{"kansai":4,"kanto":4,"other":4},"supply":4,"quality":4,"brand":3,"luxury":3,"uniform":4,"domestic":true,"sakiYield":80,"shiroYield":60,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-04","name":"静岡県産","origin":"静岡県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":1,"skin":4,"flesh":4,"cookFit":{"kansai":2,"kanto":5,"other":4},"supply":1,"quality":3,"brand":4,"luxury":4,"uniform":2,"domestic":true,"sakiYield":82,"shiroYield":61.5,"seasonYield":[],"weeklyCap":100,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"ui2u65wao8zxjewplpsx","name":"静岡県浜名湖産　かぐや","origin":"静岡県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":5,"oil":4,"skin":1,"flesh":1,"cookFit":{"kansai":5,"kanto":5,"other":5},"supply":1,"quality":5,"brand":2,"luxury":5,"uniform":3,"domestic":true,"sakiYield":83,"shiroYield":62,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"demo-06","name":"静岡県浜名湖産　でしこ","origin":"静岡県","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":3,"oil":4,"skin":2,"flesh":1,"cookFit":{"kansai":5,"kanto":4,"other":4},"supply":2,"quality":5,"brand":5,"luxury":4,"uniform":3,"domestic":true,"sakiYield":83,"shiroYield":62,"seasonYield":[],"weeklyCap":300,"v":2,"bySize":{"3P":{"avail":false},"3.5P":{"avail":false},"4P":{"avail":false},"4.5P":{"avail":false},"5P":{"avail":false},"5.5P":{"avail":false},"6P":{"avail":false}},"_sell":{"3P":[null,null,null,null],"3.5P":[null,null,null,null],"4P":[null,null,null,null],"4.5P":[null,null,null,null],"5P":[null,null,null,null],"5.5P":[null,null,null,null],"6P":[null,null,null,null]}},{"id":"170b9p9xbkwkijq3qsni","name":"中国産","origin":"中国広東省","sizes":["3P","3.5P","4P","4.5P","5P","5.5P","6P"],"demo":false,"fat":4,"oil":4,"skin":2,"flesh":1,"cookFit":{"kansai":5,"kanto":3,"other":5},"supply":5,"quality":4,"brand":1,"luxury":1,"uniform":5,"domestic":false,"sakiYield":80,"shiroYield":60,"seasonYield":[],"weeklyCap":1000,"v":2,"bySize":{"3P":{"avail":true},"3.5P":{"avail":true},"4P":{"avail":true},"4.5P":{"avail":true},"5P":{"avail":true},"5.5P":{"avail":true},"6P":{"avail":false}},"_sell":{"3P":[{"lo":3750,"hi":3750},{"lo":3450,"hi":3450},{"lo":3200,"hi":3200},{"lo":3100,"hi":3100}],"3.5P":[{"lo":3900,"hi":3900},{"lo":3550,"hi":3550},{"lo":3300,"hi":3300},{"lo":3200,"hi":3200}],"4P":[{"lo":3950,"hi":3950},{"lo":3600,"hi":3600},{"lo":3400,"hi":3400},{"lo":3250,"hi":3250}],"4.5P":[{"lo":4100,"hi":4100},{"lo":3750,"hi":3750},{"lo":3500,"hi":3500},{"lo":3400,"hi":3400}],"5P":[{"lo":4150,"hi":4150},{"lo":3800,"hi":3800},{"lo":3550,"hi":3550},{"lo":3450,"hi":3450}],"5.5P":[{"lo":4150,"hi":4150},{"lo":3800,"hi":3800},{"lo":3550,"hi":3550},{"lo":3450,"hi":3450}],"6P":[{"lo":4150,"hi":4150},{"lo":3800,"hi":3800},{"lo":3550,"hi":3550},{"lo":3450,"hi":3450}]}}],"pricing":{"maxKg":100,"tiers":[{"from":3,"to":5},{"from":5,"to":10},{"from":10,"to":20},{"from":20,"to":null}]},"weights":{"base":{"flesh":15,"fat":10,"oil":10,"skin":10,"cook":15,"quality":10,"supply":10,"price":5,"brand":0,"luxury":0,"domestic":0,"uniform":0,"yield":0},"bonus":{"flesh":0,"fat":0,"oil":0,"skin":0,"cook":20,"quality":20,"supply":20,"price":20,"brand":20,"luxury":20,"domestic":20,"uniform":20,"yield":20}},"builtAt":"2026-10-27T21:01:10.309Z"}</script>
 <script>
 /* ============ ページ自身の再発行用（社長が「最新にする」を押したとき） ============ */
 const APP_JS = (document.currentScript && document.currentScript.textContent) || "";
 const STATIC_MARKUP = "<header class=\"top\">\n  <div class=\"brand\"><b>MOGAMI PARTNER</b><span>株式会社もがみ 社内業務支援</span></div>\n  <div class=\"who\" id=\"who\"></div>\n</header>\n<div class=\"shell\">\n  <nav class=\"side\" id=\"side\" aria-label=\"メインメニュー\"></nav>\n  <main id=\"main\"><div class=\"gate\"><p class=\"eyebrow\">接続中</p><h1>社員情報を確認しています</h1><p class=\"muted\">ログイン状態とデータベースへの接続を確認しています。数秒お待ちください。</p></div></main>\n</div>\n<nav class=\"tabs\" id=\"tabs\" aria-label=\"メインメニュー\"></nav>\n<div id=\"toastHost\"></div>";
 const HEAD_BITS = "<title>MOGAMI PARTNER</title>\n<meta name=\"claude:viewport-fit-sides\" content=\"cover\">\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap\">\n";
 if (document.currentScript) document.currentScript.insertAdjacentHTML("beforebegin", STATIC_MARKUP);
-/* スマホがダークモードでも、いつも白い背景で表示する */
-try { document.documentElement.setAttribute("data-theme","light"); } catch(e){}
 let PUB = null; try { PUB = JSON.parse(document.getElementById("pub-data").textContent); } catch(e){}
 /* ============ 定義 ============ */
 const ROLES = {admin:"管理者", sales:"営業", order:"受注", floor:"現場", delivery:"配送"};
@@ -493,28 +438,6 @@ function renderChrome(){
   document.getElementById("tabs").hidden = !r;
 }
 
-/* 表の自動カード化：見出し行の文字を各セルのラベルにし、横幅に入らない表だけカード表示に切り替える */
-function stackTables(){
-  const main = document.getElementById("main"); if (!main || !main.querySelectorAll) return;
-  main.querySelectorAll(".tablewrap").forEach(w=>{
-    const t = w.querySelector("table"); if (!t) return;
-    const rows = [...t.rows], hdr = rows.find(r=>r.cells.length && [...r.cells].every(c=>c.tagName==="TH"));
-    const labels = hdr ? [...hdr.cells].map(c=>c.textContent.trim()) : [];
-    if (hdr) hdr.classList.add("hdr");
-    rows.forEach(r=>{ if (r!==hdr) [...r.cells].forEach((c,i)=>{ c.setAttribute("data-label", labels[i]||""); }); });
-    w.classList.remove("stacked");
-    if (t.scrollWidth > w.clientWidth + 2) w.classList.add("stacked");
-  });
-}
-let stackQueued = false;
-const queueStack = () => { if (stackQueued) return; stackQueued = true; requestAnimationFrame(()=>{ stackQueued = false; stackTables(); }); };
-try {
-  const mainEl = document.getElementById("main");
-  if (typeof MutationObserver!=="undefined" && mainEl && mainEl.nodeType===1){
-    new MutationObserver(queueStack).observe(mainEl, {childList:true, subtree:true});
-    window.addEventListener("resize", queueStack); window.addEventListener("orientationchange", queueStack); mainEl.addEventListener("toggle", queueStack, true);
-  }
-} catch(e){}
 function render(){
   pending = false;
   renderChrome();
@@ -748,12 +671,13 @@ function resultView(){
   if ((R.later||[]).length) wrap.append(laterSection(R));
   if (R.others.length) wrap.append(h("details",{class:"x"}, h("summary",null,"4位以下（"+R.others.length+"件）"), h("div",{class:"tablewrap"}, h("table",{class:"t"}, h("tr",null,h("th",null,"商品"),h("th",{class:"num"},"点数"),h("th",null,"要確認")), R.others.map(r=>h("tr",null,h("td",null,r.p.name),h("td",{class:"num"},r.total),h("td",null,r.unknown.join("・")||"—")))))));
   if (R.excluded.length) wrap.append(h("details",{class:"x"}, h("summary",null,"条件外の商品（"+R.excluded.length+"件・ランキング対象外）"), h("div",{class:"log"}, R.excluded.map(x=>h("div",{class:"e"}, h("b",null,x.p.name), h("div",{class:"m"}, x.why.map(w=>h("span",{class:"pill "+(w.includes("要確認")?"warn":"bad")},w))))))));
-  if (R.top.length) wrap.append(h("div",{class:"panel row noprint"},
-    h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る（ご提案）"), h("div",{class:"small muted"},"おすすめ3件・販売単価・1回の金額の目安を文章にします。"+(can("custEdit") ? "" : "社長への報告・カルテ登録は、下の緑の枠「社長にLINEで送る」を使ってください。"))),
-    lineButton(resultText(R), "お客様にLINEで送る"), copyButton(resultText(R)), printButton()));
+  if (R.top.length) wrap.append(h("div",{class:"panel row"},
+    h("div",{style:"flex:1;min-width:220px"}, h("b",null,"結果をLINEで送る"), h("div",{class:"small muted"},"おすすめ3件・販売単価・1回の金額の目安を文章にします。")),
+    lineButton(resultText(R), "LINEで送る"), copyButton(resultText(R))));
+  if (R.top.length) wrap.append(pdfPanel(R));
   if (R.top.length && !can("custEdit")){
     const ok = sh.name.trim();
-    wrap.append(h("div",{class:"panel stack noprint",style:"border:2px solid var(--green-solid)"},
+    wrap.append(h("div",{class:"panel stack",style:"border:2px solid var(--green-solid)"},
       h("b",null,"社長に送る（顧客カルテ登録用）"),
       h("div",{class:"small muted"},"お店の情報と診断結果を、社長がアプリに取り込める形で送ります。LINEが開いたら、送り先に社長を選んでください。"),
       ok ? h("div",{class:"row"}, lineButton(registerText(R), "社長にLINEで送る"), copyButton(registerText(R), "文章をコピー"))
@@ -765,7 +689,7 @@ function resultView(){
     const nm = (sh.name||"").trim();
     const target = S.customers.find(c=>c.id===D.customerId) || (nm ? S.customers.find(c=>c.name.trim()===nm) : null);
     const label = target ? "「"+target.name+"」のカルテに保存" : nm ? "「"+nm+"」を新しく登録して保存" : "保存する";
-    const box = h("div",{class:"panel stack noprint"},
+    const box = h("div",{class:"panel stack"},
       h("b",null,"顧客カルテに保存"),
       h("div",{class:"row"},
         h("div",{style:"flex:1;min-width:220px"}, sel(D,"customerId",[["","（上のお店の名前で保存）"], ...S.customers.map(c=>[c.id,c.name])], ()=>render())),
@@ -776,6 +700,95 @@ function resultView(){
     wrap.append(box);
   }
   return wrap;
+}
+/* ============ 結果をPDFにして共有（お客様向け・社内情報なし） ============ */
+const PDF_LIBS = ["https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"];
+function loadScript(src){ return new Promise((ok, ng) => { const old = document.querySelector('script[data-src="'+src+'"]'); if (old && old.dataset.ok) return ok();
+  const el = document.createElement("script"); el.src = src; el.dataset.src = src; el.onload = () => { el.dataset.ok = "1"; ok(); }; el.onerror = () => { el.remove(); ng(new Error("load "+src)); }; document.head.appendChild(el); }); }
+function pdfName(){ const shop = (S.diag.shop?.name||"").trim().replace(/[\\/:*?"<>|\s]+/g,""); return "もがみ_うなぎのご提案" + (shop ? "_"+shop : "") + "_" + today() + ".pdf"; }
+/* PDF用の紙面。色は固定（画面のダークモードに左右されない）。原価・粗利・社内メモは入れない */
+function pdfReport(R){
+  const A = S.diag.ans, shop = (S.diag.shop?.name||"").trim(), kg = diagKg();
+  const st = (css, ...kids) => h("div",{style:css}, ...kids);
+  const cond = [COOK[A.cook], A.tare!=null && A.tare!=="" ? "タレ "+tareText(A.tare) : null, "味 "+lbl(FAT,A.fat), isNum(A.oil) ? "脂 "+lbl(OIL,A.oil) : null, "皮 "+lbl(SKIN,A.skin), "身 "+lbl(FLESH,A.flesh), A.size==="any" ? "サイズおまかせ" : A.size].filter(x=>x!=null).join("／");
+  const card = (r, i, later) => { const p = r.p, e = estimate(p);
+    return st("border:1px solid "+(later?"#c9c2b4":"#1f3d33")+";"+(later?"border-style:dashed;":"")+"border-radius:10px;padding:16px 18px;margin-top:12px;background:#fff",
+      st("display:flex;justify-content:space-between;gap:12px;align-items:baseline",
+        st("font-size:20px;font-weight:700", later ? "" : h("span",{style:"color:#1f3d33;margin-right:8px"}, "第"+(i+1)+"候補"), p.name.replace(/【架空】/,"")),
+        st("font-size:22px;font-weight:700;color:#1f3d33;white-space:nowrap", String(r.total), h("span",{style:"font-size:13px;color:#6b665c"},"/100"))),
+      st("font-size:13px;color:#6b665c;margin-top:2px", "産地："+(p.origin||"確認中") + (later ? "　※現在は在庫なし（入荷時にご案内）" : "")),
+      e.q ? st("margin-top:8px;font-size:15px", "販売単価（税抜）", h("b",{style:"font-size:19px;margin:0 4px"}, e.q.lo===e.q.hi ? yen(e.q.lo) : yen(e.q.lo)+"〜"+yen(e.q.hi)), "/kg",
+                h("span",{style:"color:#6b665c;font-size:13px"}, "（"+(e.sz ? e.sz+"・" : "")+tierLabel(e.t)+"）"),
+                later ? null : st("font-size:14px;margin-top:2px", num(e.kg,1).replace(/\.0$/,"")+"kgのご注文で ", h("b",null, e.q.lo===e.q.hi ? yen(e.totLo) : yen(e.totLo)+"〜"+yen(e.totHi)), "（税抜）"))
+          : st("margin-top:8px;font-size:15px","価格はお問い合わせください"),
+      r.reasons.length ? h("ul",{style:"margin:8px 0 0;padding-left:20px;font-size:14px;line-height:1.7"}, r.reasons.slice(0,4).map(x=>h("li",null,x))) : null);
+  };
+  return st("width:720px;padding:32px 36px;background:#fff;color:#1d1d1b;font-family:'Zen Kaku Gothic New',system-ui,-apple-system,'Hiragino Sans',sans-serif;line-height:1.5",
+    st("display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1f3d33;padding-bottom:10px",
+      st("font-size:26px;font-weight:700;font-family:'Shippori Mincho',serif;color:#1f3d33","うなぎのご提案"),
+      st("font-size:13px;color:#6b665c;text-align:right", "株式会社もがみ", h("br"), localDate(nowIso()))),
+    shop ? st("font-size:22px;font-weight:700;margin-top:16px", shop+" 様") : null,
+    st("margin-top:10px;font-size:14px;background:#f4f1ea;border-radius:8px;padding:10px 14px",
+      st("", h("b",null,"ご希望の条件　"), cond), st("", h("b",null,"重視すること　"), prioText(A)), kg!=null ? st("", h("b",null,"1回の注文量　"), num(kg,1).replace(/\.0$/,"")+"kg") : null),
+    R.top.map((r,i)=>card(r,i,false)),
+    (R.later||[]).length ? st("margin-top:20px", st("font-size:17px;font-weight:700","入荷したらおすすめ"), R.later.map(r=>card(r,0,true))) : null,
+    st("margin-top:22px;font-size:12px;color:#6b665c;border-top:1px solid #ddd6c8;padding-top:8px","価格は税抜の目安です。仕入れ状況により変わる場合があります。"));
+}
+async function makePdf(R){
+  for (const src of PDF_LIBS) await loadScript(src);
+  const el = pdfReport(R), host = h("div",{style:"position:fixed;left:-10000px;top:0;background:#fff"}, el);
+  document.body.append(host);
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const SC = 2, canvas = await window.html2canvas(el, {scale:SC, backgroundColor:"#ffffff", logging:false});
+    const pdf = new window.jspdf.jsPDF({unit:"mm", format:"a4"});
+    const M = 8, IW = 210-2*M, IH = 297-2*M, pxPerMm = canvas.width/IW, pageH = Math.floor(IH*pxPerMm);
+    /* ページの区切りは候補カードの切れ目に合わせる */
+    const top0 = el.getBoundingClientRect().top;
+    const ends = [...el.querySelectorAll(":scope > div, :scope > div > div")].map(c => Math.round((c.getBoundingClientRect().bottom - top0)*SC)).filter(v=>v>0).sort((a,b)=>a-b);
+    let y = 0, first = true;
+    while (y < canvas.height - 2){
+      let cut = Math.min(canvas.height, y + pageH);
+      if (cut < canvas.height){ const fit = ends.filter(v => v > y + pageH*0.3 && v <= y + pageH).pop(); if (fit) cut = fit; }
+      const c = document.createElement("canvas"); c.width = canvas.width; c.height = cut - y;
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(canvas, 0, y, canvas.width, cut-y, 0, 0, canvas.width, cut-y);
+      if (!first) pdf.addPage(); first = false;
+      pdf.addImage(c.toDataURL("image/jpeg", 0.92), "JPEG", M, M, IW, (cut-y)/pxPerMm);
+      y = cut;
+    }
+    return pdf.output("blob");
+  } finally { host.remove(); }
+}
+async function savePdf(file, fromShare){
+  if (S.downloads){ try { await S.downloads.save({filename:file.name, data:file}); if (fromShare) toast("この画面では直接共有できないため、PDFを保存しました。保存したPDFをLINEで送ってください"); return; } catch(e){ if (e && e.code==="declined") return; } }
+  const url = URL.createObjectURL(file), a = h("a",{href:url, download:file.name});
+  document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  if (fromShare) toast("この画面では直接共有できないため、PDFを開きました。開いた画面の共有ボタンからLINEを選んでください");
+}
+async function sharePdf(file){
+  /* ファイルだけを渡す（文章を一緒に渡すと、LINEに文章だけ届く機種があるため） */
+  if (navigator.canShare && navigator.share){
+    let ok = false; try { ok = navigator.canShare({files:[file]}); } catch(e){}
+    if (ok){ try { await navigator.share({files:[file]}); return; } catch(e){ if (e && e.name==="AbortError") return; } }
+  }
+  await savePdf(file, true);
+}
+function pdfPanel(R){
+  const key = resultText(R) + "|" + (S.diag.shop?.name||"");
+  if (!S.pdf || S.pdf.key!==key) S.pdf = {key, st:"idle"};
+  const P = S.pdf;
+  const make = async () => { P.st = "making"; render();
+    try { const blob = await makePdf(R); P.file = new File([blob], pdfName(), {type:"application/pdf"}); P.st = "ready"; }
+    catch(e){ console.warn(e); P.st = "error"; }
+    if (S.pdf===P) render(); };
+  /* 共有は「押した瞬間」に呼ぶ必要があるため、作成と送信のボタンを分けている */
+  return h("div",{class:"panel row"},
+    h("div",{style:"flex:1;min-width:220px"}, h("b",null,"結果をPDFで送る"),
+      h("div",{class:"small muted"}, P.st==="ready" ? "PDFができました。「LINEなどで送る」を押して、送り先にLINEを選んでください。"
+        : P.st==="error" ? "PDFを作れませんでした。電波の良い所で、もう一度お試しください。"
+        : "お客様にそのまま見せられる形（社内情報なし）のPDFを作ります。")),
+    P.st==="ready" ? [h("button",{class:"btn primary", onclick:()=>sharePdf(P.file)},"LINEなどで送る"), h("button",{class:"btn ghost", onclick:()=>savePdf(P.file)},"保存")]
+      : h("button",{class:"btn", disabled:P.st==="making", onclick:make}, P.st==="making" ? "PDFを作成中…" : P.st==="error" ? "もう一度作る" : "PDFを作る"));
 }
 /* ============ 発注量別の販売単価 ============ */
 function getPricing(){ const p = S.pricing || {};
@@ -916,7 +929,7 @@ async function savePricing(){
 /* ============ LINE共有・コピー ============ */
 /* 独立版（GitHub Pages）では自分のURL、claude.ai版ではアーティファクトのURL */
 const STANDALONE = !!window.MOGAMI_STANDALONE;
-const APP_URL = location.origin + location.pathname;
+const APP_URL = STANDALONE ? (location.origin + location.pathname) : "https://claude.ai/artifact/6we5NTeRwJZrM9TfPELKhp";
 /* 社員・お客様に配るのは独立版（GitHub Pages）のリンク */
 const PUBLIC_URL = "https://unagi-mogami.github.io/mogami-partner/";
 const lineUrl = text => "https://line.me/R/share?text=" + encodeURIComponent(text);
@@ -1033,42 +1046,9 @@ function registerText(R){
     "おすすめ：" + P.top.map((t,i)=>(i+1)+". "+t.name).join("　"),
     "", "▼登録コード（社長がアプリに貼り付けます。消さないでください）", "MP1:" + encReg(P)].filter(x=>x!==null).join("\n");
 }
-/* 登録コードがないとき：「ご提案」「カルテ登録」の文章そのものから読み取る（担当者・電話などは入っていないことがある） */
-function parseReadableText(text){
-  const L = String(text||"").replace(/\r/g,"").split("\n").map(x=>x.trim()).filter(Boolean);
-  const hi = L.findIndex(x=>x.startsWith("【もがみ うなぎのご提案】") || x.startsWith("【MOGAMI カルテ登録】"));
-  if (hi<0) return null;
-  const B = L.slice(hi), get = k => { const x = B.find(y=>y.startsWith(k+"：")); return x!=null ? x.slice(k.length+1).trim() : ""; };
-  const cond = get("条件"); if (!cond) return null;
-  const rev = (arr, v) => { const i = arr.indexOf(v); return i>=0 ? i+1 : undefined; };
-  const shop = {name:get("店名"), person:get("担当者"), phone:get("電話"), address:get("住所"), memo:get("メモ")};
-  if (!shop.name && B[1] && / 様$/.test(B[1])) shop.name = B[1].replace(/ 様$/,"").trim();
-  const A = {}; let kg = null;
-  const pre = {"味 ":["fat",FAT], "脂 ":["oil",OIL], "皮 ":["skin",SKIN], "身 ":["flesh",FLESH]};
-  cond.split("／").map(x=>x.trim()).forEach(t=>{
-    const ck = Object.keys(COOK).find(k=>COOK[k]===t); if (ck){ A.cook = ck; return; }
-    if (t.startsWith("タレ ")){ const v = t.slice(3); A.tare = v==="どのタレにも合う" ? "any" : v==="タレは使わない" ? "none" : rev(TARE,v); return; }
-    for (const p in pre) if (t.startsWith(p)){ A[pre[p][0]] = rev(pre[p][1], t.slice(p.length)); return; }
-    if (t==="サイズおまかせ"){ A.size = "any"; return; }
-    if (SIZES.includes(t)){ A.size = t; return; }
-    const k = t.match(/^1回\s*([\d.]+)kg$/); if (k) kg = Number(k[1]);
-  });
-  const ok = get("注文量").match(/([\d.]+)\s*kg/); if (ok) kg = Number(ok[1]);
-  if (kg!=null){ const t = getPricing().tiers.find(t=>kg>=t.from && (t.to==null || kg<t.to)); if (t) A.orderKg = String(t.from); }
-  const pr = get("重視"); A.priorities = pr && pr!=="特になし" ? pr.split("・").map(x=>Object.keys(PRIORITY).find(k=>PRIORITY[k]===x.trim())).filter(Boolean) : [];
-  Object.keys(A).forEach(k=>{ if (A[k]===undefined) delete A[k]; }); A.v = 2;
-  const rec = get("おすすめ");
-  const names = (rec ? rec.split(/\s+(?=\d+\.\s)/) : B.filter(x=>/^\d+\.\s/.test(x))).map(x=>x.replace(/^\d+\.\s*/,"").trim()).filter(Boolean).slice(0,3);
-  const find = nm => S.products.find(p=>String(p.name||"").replace(/【架空】/,"").trim()===nm);
-  const top = names.map(nm=>{ const p = find(nm) || find(nm.replace(/（[^（）]*）$/,"").trim()); return {productId:p?p.id:"", name:p?p.name:nm, score:null}; });
-  const d = get("診断日"), dt = d ? new Date(d.replace(/-/g,"/")) : null;
-  let hs = 0; for (const c of B.join("\n")) hs = (hs*31 + c.codePointAt(0)) >>> 0;
-  return {v:1, id:"t"+hs.toString(36), date: dt && !isNaN(dt) ? dt.toISOString() : nowIso(), shop, answers:A, need:"", kg, top, fromText:true};
-}
 function parseRegText(text){
   const m = String(text||"").match(/MP1:([A-Za-z0-9+\/=\s]+)/);
-  const fb = m ? null : parseReadableText(text); if (fb) return fb;
-  if (!m) throw new Error("読み取れませんでした。「【MOGAMI カルテ登録】」または「【もがみ うなぎのご提案】」で始まるLINEのメッセージを、最初から最後までコピーして貼り付けてください。");
+  if (!m) throw new Error("登録コード（MP1:で始まる部分）が見つかりません。LINEのメッセージを全部コピーして貼り付けてください。");
   let o; try { o = decReg(m[1].replace(/\s+/g,"")); } catch(e){ throw new Error("登録コードが途中で切れています。メッセージを最後までコピーしてください。"); }
   if (!o || o.v!==1 || !o.shop || !o.shop.name) throw new Error("登録コードの形式が正しくありません。");
   return o;
@@ -1102,17 +1082,15 @@ function importPanel(){
   const match = I.P ? S.customers.find(c=>c.name.trim()===I.P.shop.name) : null;
   return h("section",{class:"panel stack",style:"border:2px solid var(--green-solid)"},
     h("h2",{style:"font-size:18px"},"LINEの内容から登録"),
-    h("p",{class:"small muted",style:"margin:0"},"社員から届いた「【MOGAMI カルテ登録】」のメッセージを長押し →「コピー」して、下に貼り付けてください。お客様向けの「【もがみ うなぎのご提案】」の文章でも登録できます。"),
+    h("p",{class:"small muted",style:"margin:0"},"社員から届いた「【MOGAMI カルテ登録】」のメッセージを長押し →「コピー」して、下に貼り付けてください。"),
     h("textarea",{class:"i", id:"imp-text", style:"min-height:120px", placeholder:"ここに貼り付け", value:I.text, oninput:e=>{ I.text = e.target.value; }}),
     h("div",{class:"row"},
       h("button",{class:"btn primary", onclick:()=>{ try { I.P = parseRegText(I.text); I.err = ""; } catch(e){ I.P = null; I.err = e.message; } render(); }},"読み取る"),
       h("button",{class:"btn ghost", onclick:()=>{ S.imp = null; render(); }},"閉じる")),
     I.err ? h("div",{class:"banner warn"}, I.err) : null,
     I.P ? h("div",{class:"stack",style:"gap:8px"},
-      I.P.fromText ? h("div",{class:"banner info"},"登録コードがないため、文章から読み取りました。担当者・電話・住所が空の場合は、登録後にカルテで追加してください。") : null,
-      I.P.fromText ? field("店名（確認・修正できます）", h("input",{class:"i", id:"imp-name", placeholder:"例：うなぎ処 ○○", value:I.P.shop.name, oninput:e=>{ I.P.shop.name = e.target.value; }, onchange:e=>{ I.P.shop.name = e.target.value.trim(); render(); }})) : null,
       h("dl",{class:"meta"},
-        h("dt",null,"店名"), h("dd",null, h("b",null,I.P.shop.name||"（未入力）")),
+        h("dt",null,"店名"), h("dd",null, h("b",null,I.P.shop.name)),
         h("dt",null,"担当者"), h("dd",null, I.P.shop.person||"—"),
         h("dt",null,"電話"), h("dd",null, I.P.shop.phone||"—"),
         h("dt",null,"住所"), h("dd",null, I.P.shop.address||"—"),
@@ -1121,8 +1099,8 @@ function importPanel(){
         h("dt",null,"おすすめ"), h("dd",null, (I.P.top||[]).map((t,i)=>(i+1)+". "+t.name).join("　"))),
       match ? h("div",{class:"banner info"},"同じ名前の顧客「"+match.name+"」がカルテにあります。") : null,
       h("div",{class:"row"},
-        match ? h("button",{class:"btn primary", onclick:async()=>{ if (!I.P.shop.name.trim()){ toast("店名を入れてください"); return; } const id = await importToCustomer(I.P, match, "line"); if (id){ S.custId = id; S.custNew=false; S.custDraft=null; render(); } }},"「"+match.name+"」に診断を追加") : null,
-        h("button",{class: match ? "btn" : "btn primary", onclick:async()=>{ if (!I.P.shop.name.trim()){ toast("店名を入れてください"); return; } const id = await importToCustomer(I.P, null, "line"); if (id){ S.custId = id; S.custNew=false; S.custDraft=null; render(); } }}, match ? "別の顧客として新規登録" : "新しい顧客として登録"))) : null);
+        match ? h("button",{class:"btn primary", onclick:async()=>{ const id = await importToCustomer(I.P, match, "line"); if (id){ S.custId = id; S.custNew=false; S.custDraft=null; render(); } }},"「"+match.name+"」に診断を追加") : null,
+        h("button",{class: match ? "btn" : "btn primary", onclick:async()=>{ const id = await importToCustomer(I.P, null, "line"); if (id){ S.custId = id; S.custNew=false; S.custDraft=null; render(); } }}, match ? "別の顧客として新規登録" : "新しい顧客として登録"))) : null);
 }
 async function saveDiagnosis(R){
   const D = S.diag; const nm = (D.shop?.name||"").trim();
@@ -1195,7 +1173,7 @@ function customerDetail(){
   wrap.append(h("section",{class:"sec"}, h("h2",null,"診断結果", h("span",{class:"c"},(c.diagnoses||[]).length+"件")),
     h("div",{class:"log"}, (c.diagnoses||[]).length ? c.diagnoses.map(x=>h("div",{class:"e"},
       h("div",{class:"m"}, h("span",null,fmtDate(x.date)), h("span",null,staffName(x.by)), (a=>h("span",null,[COOK[a.cook], a.tare!=null && a.tare!=="" ? "タレ："+tareText(a.tare) : null, "味："+lbl(FAT,a.fat), isNum(a.oil) ? "脂："+lbl(OIL,a.oil) : null, "皮："+lbl(SKIN,a.skin), "身："+lbl(FLESH,a.flesh), a.size==="any"?"おまかせ":a.size, "重視："+prioText(a)].filter(x=>x!=null).join("／")))(normScale(x.answers))),
-      h("div",null, x.top.map((t,i)=>h("span",{style:"margin-right:12px"}, (i+1)+". "+t.name+" ", t.score!=null ? h("b",null,t.score+"点") : null, t.unknown?.length ? h("span",{class:"pill warn",style:"margin-left:4px"},"要確認") : null))),
+      h("div",null, x.top.map((t,i)=>h("span",{style:"margin-right:12px"}, (i+1)+". "+t.name+" ", h("b",null,t.score+"点"), t.unknown?.length ? h("span",{class:"pill warn",style:"margin-left:4px"},"要確認") : null))),
       can("diag") ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ S.diag={step:QUESTIONS.length-1, ans:{...normScale(x.answers)}, customerId:c.id, need:x.need||"", showResult:true}; go("diagnose"); }},"この条件で再診断（最新の在庫で）")) : null))
     : h("div",{class:"empty"},"まだ診断結果はありません。「この顧客で診断する」から保存できます。"))));
 
@@ -1453,8 +1431,8 @@ function weightsPanel(){
 
 /* ============ 原価・利益シミュレーター ============ */
 function simDefaults(){ return {
-  curPrice:{v:"",src:"act"}, newPrice:{v:"",src:"act"}, monthlyKg:{v:"",src:"act"}, size:{v:"4P",src:"act"},
-  fishPerMeal:{v:"",src:"act"}, sellPrice:{v:"",src:"act"}, meals:{v:"",src:"act"} }; }
+  curPrice:{v:"5200",src:"act"}, newPrice:{v:"4800",src:"est"}, monthlyKg:{v:"300",src:"act"}, size:{v:"4P",src:"act"},
+  fishPerMeal:{v:"0.5",src:"act"}, sellPrice:{v:"4200",src:"act"}, meals:{v:"2000",src:"est"} }; }
 const SIM_FIELDS = [
   ["curPrice","現在の仕入れ価格","円/kg・税抜"],["newPrice","提案商品の価格","円/kg・税抜"],["monthlyKg","月間仕入れ数量","kg"],
   ["size","サイズ規格",""],["fishPerMeal","1食あたり使用量","尾"],["sellPrice","販売価格（1食）","円・税抜"],["meals","月間販売食数","食"]
@@ -1536,106 +1514,6 @@ function juCalc(j){
   const maxKg = Object.fromEntries(SIZES.map(sz=>[sz, allow!=null ? allow*pOf(sz)/fishFor(pOf(sz), SHIRO_DEFAULT) : null]));
   return {price, fish: gram!=null ? gram : fish, gram, other, target, t, rows, allow, maxKg};
 }
-/* お客様に送る文章（お店側の数字だけ。仕入原価・粗利・上限単価は入れない） */
-function shopLine(){ const n = (S.diag?.shop?.name||"").trim(); return n ? n+" 様" : null; }
-function juText(c, j){
-  const rate = (lo, hi) => Math.abs(lo-hi)<0.05 ? num(lo,1)+"%" : num(lo,1)+"〜"+num(hi,1)+"%";
-  const fishL = j.mode==="gram" ? "白焼き"+j.gram+"g" : (FISH.find(f=>f[0]===j.fish)||[,j.fish+"尾"])[1];
-  const rows = c.rows.filter(r=>r.q && r.av!==false).slice(0,5);
-  const okN = c.target!=null ? rows.length && c.rows.filter(r=>r.q && r.av!==false && r.rLo<=c.target).length : null;
-  const L = ["【もがみ 鰻重の原価率チェック】", shopLine(),
-    "条件：鰻重 "+yen(c.price)+"（税抜）／うなぎ "+fishL+"／うなぎ以外の原価 "+yen(c.other)+"／"+(c.target!=null ? "目標原価率 "+c.target+"%" : "目標原価率なし"),
-    "もがみの価格：1回 "+tierLabel(c.t)+" の販売単価（税抜）", ""];
-  if (c.target!=null) L.push("目標"+c.target+"%に収まる候補："+okN+"件", "");
-  if (!rows.length) L.push("在庫のある候補がありません。");
-  rows.forEach((r,i)=>L.push((i+1)+". "+r.p.name.replace(/【架空】/,"")+" "+r.sz, "　販売単価 "+priceText(r.q)+"/kg → 原価率 "+rate(r.rLo,r.rHi)+"（1食の原価 "+(Math.abs(r.tLo-r.tHi)<1 ? yen(r.tLo) : yen(r.tLo)+"〜"+yen(r.tHi))+"）"));
-  L.push("", "※原価率＝（うなぎ代＋うなぎ以外の原価）÷ 鰻重の価格。うなぎ以外の原価はお店の入力値です。", "株式会社もがみ");
-  return L.filter(x=>x!=null).join("\n");
-}
-function printCopy(){
-  const main = document.getElementById("main"), c = main.cloneNode(true);
-  const src = main.querySelectorAll("input,select,textarea"), dst = c.querySelectorAll("input,select,textarea");
-  dst.forEach((el,i)=>{ const o = src[i]; let v = "";
-    if (el.tagName==="SELECT") v = o.selectedIndex>=0 ? o.options[o.selectedIndex].text : "";
-    else if (o.type==="checkbox"||o.type==="radio") v = o.checked ? "✓" : "";
-    else if (o.type==="password") v = ""; else v = o.value;
-    const sp = document.createElement(el.tagName==="TEXTAREA" ? "div" : "span"); sp.className = "printval"; sp.textContent = v || "—"; el.replaceWith(sp); });
-  c.querySelectorAll('[role=radiogroup], .yn').forEach(g=>{ const on = [...g.querySelectorAll('[aria-checked="true"],[aria-pressed="true"]')].map(b=>b.textContent.trim()).join("・"); const sp = document.createElement("span"); sp.className = "printval"; sp.textContent = on || "—"; g.replaceWith(sp); });
-  c.querySelectorAll('.opt').forEach(o=>{ if (o.getAttribute("aria-pressed")!=="true") o.remove(); });
-  [...c.children].forEach(x=>{ if (x.classList && x.classList.contains("banner")) x.remove(); });
-  c.querySelectorAll(".btn, .linkbtn, .src, .tabbar, .act, details.memo, .noprint, script, nav, .installbtn").forEach(x=>x.remove());
-  /* 控えに要らないもの：入力用の枠・点数の内訳・条件外や4位以下の一覧・候補にならない行・補足のヒント */
-  c.querySelectorAll(".shopname, .bd, .hint, details, tr.dim").forEach(x=>x.remove());
-  c.querySelectorAll("#ju-out").forEach(x=>{ const sm = x.closest(".sim"); if (sm) sm.classList.add("one"); });
-  c.querySelectorAll(".panel").forEach(pn=>{ if (!pn.querySelector(".rec") && /1回の注文量（kg）/.test(pn.textContent) && pn.querySelectorAll("label.f").length<=2) pn.remove(); });
-  c.querySelectorAll("tr").forEach(r=>{ if (/原価未登録/.test(r.textContent)) r.remove(); });
-  c.querySelectorAll(".tablewrap.stacked").forEach(w=>w.classList.remove("stacked"));
-  c.removeAttribute("id"); c.querySelectorAll("[id]").forEach(x=>x.removeAttribute("id"));
-  const title = (main.querySelector("h1")?.textContent || "MOGAMI PARTNER").trim();
-  const head = h("div",{class:"print-head"}, h("b",null,"株式会社もがみ"), h("span",null, title), h("span",null,"出力日 "+localDate(nowIso())));
-  return {title, node: h("div",null, head, ...c.childNodes)};
-}
-async function printView(){
-  const {title, node} = printCopy();
-  let inFrame = true; try { inFrame = window.self!==window.top; } catch(e){}
-  if (!inFrame){
-    let area = document.getElementById("print-area"); if (!area){ area = h("div",{id:"print-area"}); document.body.append(area); }
-    area.replaceChildren(node); document.documentElement.classList.add("printing");
-    const done = () => { document.documentElement.classList.remove("printing"); area.replaceChildren(); window.removeEventListener("afterprint", done); };
-    window.addEventListener("afterprint", done);
-    setTimeout(()=>window.print(), 50); return;
-  }
-  return savePdf();
-}
-/* PDFを作る：控えを画像にしてA4に貼る（日本語もそのまま残る）。ライブラリは押したときだけ読み込む */
-const PDF_LIBS = ["https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"];
-function loadScript(src){ return new Promise((ok, ng)=>{ if ([...document.scripts].some(x=>x.src===src)) return ok(); const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = ()=>ng(new Error("load "+src)); document.head.append(el); }); }
-/* 独立版：できたPDFを「LINEなどで送る」（スマホの共有画面）か「ファイルに保存」から選ぶ。
-   共有画面はボタンを押した直後しか開けないので、PDFができてからもう一度押してもらう */
-function pdfDownload(blob, name){ const url = URL.createObjectURL(blob), a = h("a",{href:url, download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000); }
-function pdfSheet(blob, name, title){
-  let f = null; try { f = new File([blob], name, {type:"application/pdf"}); } catch(e){}
-  const canShare = !!(f && navigator.canShare && navigator.canShare({files:[f]}));
-  if (!canShare){ pdfDownload(blob, name); toast("PDFを保存しました"); return; }
-  const close = () => sheet.remove();
-  const sheet = h("div",{class:"pdfsheet", role:"dialog", "aria-label":"PDFができました"},
-    h("div",{class:"panel stack"}, h("b",null,"PDFができました"), h("div",{class:"small muted"}, name),
-      h("button",{class:"btn line", type:"button", onclick:async()=>{ try { await navigator.share({files:[f], title}); close(); } catch(e){ if (e && e.name!=="AbortError") toast("送れませんでした。「ファイルに保存」をお試しください"); } }}, "LINEなどで送る"),
-      h("button",{class:"btn", type:"button", onclick:()=>{ pdfDownload(blob, name); close(); toast("PDFを保存しました"); }}, "ファイルに保存"),
-      h("button",{class:"btn ghost", type:"button", onclick:close}, "閉じる")));
-  document.querySelectorAll(".pdfsheet").forEach(x=>x.remove()); document.body.append(sheet);
-}
-let pdfBusy = false;
-async function savePdf(){
-  if (pdfBusy) return; pdfBusy = true;
-  const {title, node} = printCopy();
-  let area = document.getElementById("print-area"); if (!area){ area = h("div",{id:"print-area"}); document.body.append(area); }
-  area.replaceChildren(node); area.style.cssText = "display:block;position:absolute;left:-12000px;top:0;width:760px;background:#fff;color:#000;padding:4px";
-  toast("PDFを作っています…");
-  try {
-    for (const u of PDF_LIBS) await loadScript(u);
-    try { await document.fonts.ready; } catch(e){}
-    const canvas = await window.html2canvas(area, {scale:2, backgroundColor:"#ffffff", useCORS:true, logging:false});
-    const pdf = new window.jspdf.jsPDF({unit:"mm", format:"a4", orientation:"portrait"});
-    const M = 10, W = 210 - M*2, H = 297 - M*2, pxPerMm = canvas.width / W, pageHpx = Math.floor(H * pxPerMm);
-    for (let y = 0, i = 0; y < canvas.height; y += pageHpx, i++){
-      const hpx = Math.min(pageHpx, canvas.height - y), part = document.createElement("canvas");
-      part.width = canvas.width; part.height = hpx; part.getContext("2d").drawImage(canvas, 0, y, canvas.width, hpx, 0, 0, canvas.width, hpx);
-      if (i) pdf.addPage();
-      pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", M, M, W, hpx / pxPerMm);
-    }
-    const blob = pdf.output("blob"), name = "MOGAMI_"+title.replace(/[\\/:*?"<>|\s]+/g,"")+"_"+today()+".pdf";
-    if (S.downloads){ await S.downloads.save({filename:name, data:blob}); toast("PDFを保存しました"); }
-    else pdfSheet(blob, name, title);
-  } catch(e){ console.warn(e); if (!(e && e.code==="declined")) toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }
-  finally { area.replaceChildren(); area.style.cssText = ""; pdfBusy = false; }
-}
-function canPrintDialog(){ try { return window.self===window.top; } catch(e){ return false; } }
-function printButton(){ return [h("button",{class:"btn", type:"button", onclick:savePdf}, "PDFで保存"), canPrintDialog() ? h("button",{class:"btn", type:"button", onclick:printView}, "印刷") : null]; }
-function sendBox(title, text){
-  return h("div",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,title), h("div",{class:"small muted"},"お店側の数字だけを文章にします（もがみの仕入原価・利益は入りません）。")),
-    lineButton(text, "お客様にLINEで送る"), copyButton(text), printButton());
-}
 function juOut(out){
   const j = S.ju, c = juCalc(j);
   if (!c.price || !c.fish){ out.replaceChildren(h("div",{class:"panel"}, h("p",{class:"muted",style:"margin:0"},"鰻重の販売価格を入れると、ここに原価率が出ます。"))); return; }
@@ -1667,7 +1545,6 @@ function juOut(out){
         h("td",{class:"num"}, r.q ? (Math.abs(r.eLo-r.eHi)<1 ? yen(r.eLo) : yen(r.eLo)+"〜"+yen(r.eHi)) : "—"),
         h("td",{class:"num"}, r.q ? (Math.abs(r.tLo-r.tHi)<1 ? yen(r.tLo) : yen(r.tLo)+"〜"+yen(r.tHi)) : "—"),
         h("td",{class:"num"}, r.q ? pill(r) : "—"))))) : h("div",{class:"panel"}, h("p",{class:"muted",style:"margin:0"},"このサイズを扱う商品が登録されていません。")),
-    c.rows.some(r=>r.q && r.av!==false) ? sendBox("この結果をお客様に送る", juText(c, j)) : null,
     h("p",{class:"small muted",style:"margin:0"},"もがみ販売単価は、発注量「"+tierLabel(c.t)+"」の価格です。緑＝目標以内、赤＝目標超え。"),
     h("div",{class:"formula"}, h("b",null,"計算式"), h("br"),
       "うなぎ原価/食 ＝ もがみ販売単価/kg × 使用尾数 ÷ サイズ（P）", h("br"),
@@ -1676,7 +1553,7 @@ function juOut(out){
       "グラム指定のとき：必要な尾数 ＝ 白焼きg ÷（1尾の重さ × 白焼き歩留まり）", h("br"),
       "原価合計/食 ＝ うなぎ原価/食 ＋ うなぎ以外の原価（"+yen(c.other)+"）", h("br"),
       "原価率 ＝ 原価合計/食 ÷ 鰻重の販売価格（"+yen(c.price)+"）"),
-    can("custEdit") && S.customers.length ? h("div",{class:"panel row noprint"},
+    can("custEdit") && S.customers.length ? h("div",{class:"panel row"},
       h("div",{style:"flex:1;min-width:200px"}, field("このチェックを顧客カルテに保存", sel(j,"cust",[["","保存先の顧客を選択"], ...S.customers.map(x=>[x.id,x.name])]))),
       h("button",{class:"btn primary", onclick:async()=>{
         const cu = S.customers.find(x=>x.id===j.cust); if (!cu){ toast("保存先の顧客を選んでください"); return; }
@@ -1685,86 +1562,39 @@ function juOut(out){
         await write(()=>S.db.doc("customers/"+cu.id).update({juChecks:[e, ...(cu.juChecks||[])].slice(0,30), updatedAt:nowIso()}), cu.name+" のカルテに保存しました");
       }},"保存")) : null].filter(x=>x!=null && x!==false));
 }
-/* 提案価格の自動反映：選んだもがみの商品・サイズ・発注量から販売単価（幅があれば中間）を入れる。手で変えたらそちらを優先 */
-function simPickDefaults(){
-  const pk = {pid:"", kg:""};
-  try { if (S.diag?.showResult){ const R = recommend(S.diag.ans, S.diag.need); if (R.top[0]) pk.pid = R.top[0].p.id; } } catch(e){}
-  const dk = diagKg(); if (dk!=null) pk.kg = String(dk);
-  return pk;
-}
-function simAutoPrice(s, pk){
-  const p = S.products.find(x=>x.id===pk.pid); if (!p) return null;
-  const t = tierFor(pk.kg) || getPricing().tiers[0], q = sellQuote(p, s.size.v, t);
-  const info = {p, t, q, v: q ? ceil50((q.lo+q.hi)/2) : null};
-  if (q && !s.newPrice.manual){ s.newPrice = {v:String(info.v), src:"act"}; const el = document.getElementById("sim-newPrice"); if (el && document.activeElement!==el) el.value = info.v; }
-  return info;
-}
 function simCompareView(){
-  if (!S.sim){ S.sim = simDefaults(); const sz = S.diag?.ans?.size; if (S.diag?.showResult && SIZES.includes(sz)) S.sim.size.v = sz; }
+  if (!S.sim) S.sim = simDefaults();
   const s = S.sim;
   const wrap = h("div",{class:"stack"});
   wrap.append(h("div",{class:"pagehead"}, h("h1",null,"原価・利益改善シミュレーター"), h("p",null,"今の仕入れと提案商品を並べて、1食原価と利益への影響を計算します。各項目に「実績／推定」を付けてください。"),
-    h("div",{class:"act"}, h("button",{class:"btn ghost sm", onclick:()=>{S.sim=simDefaults(); if (S.simPick) S.simPick.pid=""; render();}},"入力をクリア"))));
-  const form = h("div",{class:"panel stack"}, h("div",{class:"eyebrow"},"入力（お客様に確認した数字を入れてください）"));
+    h("div",{class:"act"}, h("button",{class:"btn ghost sm", onclick:()=>{S.sim=simDefaults(); render();}},"例の値に戻す"))));
+  const form = h("div",{class:"panel stack"}, h("div",{class:"eyebrow"},"入力（初期値は例です）"));
   if (S.products.length){
-    const pk = S.simPick || (S.simPick = simPickDefaults());
-    var ai = simAutoPrice(s, pk);
+    const pk = S.simPick || (S.simPick = {pid:"", kg:""});
     form.append(h("div",{class:"stack",style:"gap:8px;padding-bottom:12px;border-bottom:1px solid var(--line)"},
-      h("div",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"提案するもがみの商品（選ぶと提案価格に自動で入ります）"),
-      h("div",{class:"grid2"}, sel(pk,"pid",[["","商品を選択"], ...S.products.map(p=>[p.id,p.name])], ()=>{ s.newPrice.manual = false; const p = S.products.find(x=>x.id===pk.pid); if (p && p.sizes?.length && !p.sizes.includes(s.size.v)) s.size.v = p.sizes[0]; render(); }),
-        h("input",{class:"i", id:"sim-pick-kg", type:"number", inputmode:"decimal", placeholder:"1回の発注量（kg）", ...bind(pk,"kg"), onchange:()=>render()})),
-      h("div",{class:"small",id:"sim-auto"}, simAutoNote(s, ai))));
+      h("div",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"もがみの商品から提案価格を入れる"),
+      h("div",{class:"grid2"}, sel(pk,"pid",[["","商品を選択"], ...S.products.map(p=>[p.id,p.name])]), h("input",{class:"i", id:"sim-pick-kg", type:"number", inputmode:"decimal", placeholder:"1回の発注量（kg）", ...bind(pk,"kg")})),
+      h("button",{class:"btn sm", type:"button", onclick:()=>{
+        const p = S.products.find(x=>x.id===pk.pid); if (!p){ toast("商品を選んでください"); return; }
+        if (p.sizes?.length && !p.sizes.includes(s.size.v)) s.size.v = p.sizes[0];
+        const t = tierFor(pk.kg) || getPricing().tiers[0]; const q = sellQuote(p, s.size.v, t);
+        if (!q){ toast("この商品の"+s.size.v+"は仕入原価が未登録です"); return; }
+        s.newPrice = {v:String(ceil50((q.lo+q.hi)/2)), src:"act"};
+        toast("提案価格を "+s.size.v+" "+yen(s.newPrice.v)+"/kg（"+tierLabel(t)+"の中間）にしました"); render();
+      }},"提案商品の価格に反映")));
   }
-  const af = simAutoFish(s);
   for (const [k,l,u] of SIM_FIELDS){
     const input = k==="size"
       ? h("select",{class:"i", id:"sim-size", value:s.size.v, onchange:e=>{s.size.v=e.target.value; refresh();}}, SIZES.map(x=>h("option",{value:x},x+"（1尾 約"+gOf(x)+"g）")))
-      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", placeholder: k==="newPrice" ? "上で商品を選ぶと自動で入ります" : k==="fishPerMeal" ? "例：0.5（半尾）／1（1尾）" : "お客様に確認して入力", value:s[k].v, oninput:e=>{s[k].v=e.target.value; if (k==="fishPerMeal"){ s.fishPerMeal.manual = true; const fn = document.getElementById("sim-fish-note"); if (fn) fn.replaceChildren(simFishNote(s, simAutoFish(s))||""); }
-      if (k==="newPrice"){ s.newPrice.manual = true; const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, simAutoPrice(s, S.simPick||{}))); } refresh();}});
+      : h("input",{class:"i", id:"sim-"+k, type:"number", inputmode:"decimal", value:s[k].v, oninput:e=>{s[k].v=e.target.value; refresh();}});
     const srcBtns = h("div",{class:"src"}, [["act","実績"],["est","推定"]].map(([v,t])=>h("button",{type:"button","aria-pressed":String(s[k].src===v), onclick:e=>{ s[k].src=v; e.currentTarget.parentNode.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", String(b.textContent===t))); refresh(); }},t)));
-    form.append(h("label",{class:"f"}, h("span",null,l, u ? h("span",{class:"hint"}," （"+u+"）") : null), input, k==="fishPerMeal" ? h("div",{id:"sim-fish-note"}, simFishNote(s, af)) : null, srcBtns));
+    form.append(h("label",{class:"f"}, h("span",null,l, u ? h("span",{class:"hint"}," （"+u+"）") : null), input, srcBtns));
   }
   const out = h("div",{id:"sim-out", class:"stack"});
   wrap.append(h("div",{class:"sim"}, form, out));
   refreshInto(out);
   return wrap;
-  function refresh(){ const pk = S.simPick||{}; if (!s.fishPerMeal.manual){ const fn = document.getElementById("sim-fish-note"); const f2 = simAutoFish(s); if (fn) fn.replaceChildren(simFishNote(s, f2)||""); } if (pk.pid && !s.newPrice.manual){ const ai = simAutoPrice(s, pk); const n = document.getElementById("sim-auto"); if (n) n.replaceChildren(simAutoNote(s, ai)); } const o = document.getElementById("sim-out"); if (o) refreshInto(o); }
-}
-function simAutoFish(s){
-  const j = S.ju; if (!j) return null;
-  let v = null, label = "";
-  if (j.mode==="gram"){
-    const g = toNum(j.gram), P = pOf(s.size.v), p = S.products.find(x=>x.id===(S.simPick||{}).pid);
-    const y = (p ? shiroOf(p, Number(j.month)||thisMonth()) : null) ?? SHIRO_DEFAULT;
-    if (g!=null && P){ v = g / (1000/P * y/100); label = "白焼き"+g+"g（"+s.size.v+"・歩留まり"+num(y,1)+"%で約"+num(v,2)+"尾）"; }
-  } else { v = fishVal(j.fish); label = (FISH.find(f=>f[0]===j.fish)||[,j.fish+"尾"])[1]; }
-  if (v==null) return null;
-  if (!s.fishPerMeal.manual){ s.fishPerMeal = {v:String(Math.round(v*1000)/1000), src:"act"}; const el = document.getElementById("sim-fishPerMeal"); if (el && document.activeElement!==el) el.value = s.fishPerMeal.v; }
-  return {v, label};
-}
-function simFishNote(s, af){
-  if (!af) return null;
-  if (s.fishPerMeal.manual) return h("span",{class:"hint"}, h("span",{class:"pill warn"},"手入力中"), " 原価計算の選択は「"+af.label+"」 ", h("button",{type:"button",class:"linkbtn", onclick:()=>{ s.fishPerMeal.manual = false; render(); }},"原価計算の選択に戻す"));
-  return h("span",{class:"hint"}, h("span",{class:"pill ok"},"自動"), " 原価計算（鰻重）の「1食に使ううなぎ」："+af.label+" を反映");
-}
-function simAutoNote(s, ai){
-  if (!ai) return h("span",{class:"muted"},"商品を選ぶと、サイズと発注量に合わせたもがみの販売単価が「提案商品の価格」に入ります。");
-  if (!ai.q) return h("span",{class:"pill warn"}, ai.p.name+" の "+s.size.v+" は価格が未登録です。サイズを変えるか、提案価格を手で入れてください。");
-  const base = ai.p.name+"・"+s.size.v+"・"+tierLabel(ai.t)+"：販売単価 "+priceText(ai.q)+"/kg";
-  if (s.newPrice.manual) return h("span",null, h("span",{class:"pill warn"},"手入力中"), " "+base+" ", h("button",{type:"button",class:"linkbtn", onclick:()=>{ s.newPrice.manual = false; render(); }},"もがみの単価に戻す"));
-  return h("span",null, h("span",{class:"pill ok"},"自動"), " "+base+(ai.q.lo!==ai.q.hi ? "（中間の "+yen(ai.v)+" を反映）" : "を反映"));
-}
-function simText(s, r){
-  const sign = v => v==null ? "—" : (v>=0?"+":"−")+yen(Math.abs(v));
-  const est = Object.entries(s).filter(([,x])=>x.src==="est").map(([k])=>SIM_FIELDS.find(f=>f[0]===k)[1]);
-  return ["【もがみ 仕入れ切替の試算】", shopLine(),
-    "条件：サイズ "+s.size.v+"／1食 "+s.fishPerMeal.v+"尾／販売価格 "+yen(toNum(s.sellPrice.v))+"（税抜）／月 "+num(toNum(s.meals.v))+"食・仕入れ "+num(toNum(s.monthlyKg.v))+"kg",
-    "仕入れ価格：現在 "+yen(toNum(s.curPrice.v))+"/kg → もがみ "+yen(toNum(s.newPrice.v))+"/kg（税抜）", "",
-    "1食あたり原価："+yen(r.cur)+" → "+yen(r.nw)+"（原価率 "+num(r.curRate,1)+"% → "+num(r.newRate,1)+"%）",
-    "月間の仕入れ額："+yen(r.curMonthly)+" → "+yen(r.newMonthly),
-    "月間の利益への影響："+sign(r.monthlyDiff)+"（年間 "+sign(r.monthlyDiff!=null ? r.monthlyDiff*12 : null)+"）", "",
-    est.length ? "※推定値を含む試算です（推定："+est.join("・")+"）" : null,
-    "※うなぎ以外の食材・人件費・光熱費は変わらないものとして計算しています。", "株式会社もがみ"].filter(x=>x!=null).join("\n");
+  function refresh(){ const o = document.getElementById("sim-out"); if (o) refreshInto(o); }
 }
 function refreshInto(out){
   const s = S.sim, r = calcSim(s);
@@ -1795,8 +1625,7 @@ function refreshInto(out){
       "月間粗利 ＝ （販売価格 − 1食原価）× 月間販売食数", h("br"),
       "月間の利益影響 ＝ 提案の月間粗利 − 現在の月間粗利／年間＝月間×12", h("br"),
       "前提：うなぎ以外の食材・人件費・光熱費は変わらないものとして計算しています。"),
-    r.monthlyDiff!=null ? sendBox("この試算をお客様に送る", simText(s, r)) : null,
-    can("custEdit") && S.customers.length ? h("div",{class:"panel row noprint"},
+    can("custEdit") && S.customers.length ? h("div",{class:"panel row"},
       h("div",{style:"flex:1;min-width:200px"}, field("この試算を顧客カルテに保存", sel(S,"simCustomer",[["","保存先の顧客を選択"], ...S.customers.map(c=>[c.id,c.name])]))),
       h("button",{class:"btn primary", onclick:async()=>{
         const c = S.customers.find(x=>x.id===S.simCustomer); if (!c){ toast("保存先の顧客を選んでください"); return; }
@@ -2059,39 +1888,7 @@ function backupPanel(){
 }
 
 /* ============ 起動 ============ */
-/* ============ 合言葉（商品・価格データは暗号化して公開し、合言葉を入れた人だけが読める） ============ */
-const PASS_KEY = "mogami.pass";
-const normPass = s => String(s||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,"");
-const b64u8 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
-async function decryptPub(env, pass){
-  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(normPass(pass)), "PBKDF2", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey({name:"PBKDF2", hash:"SHA-256", salt:b64u8(env.salt), iterations:env.iter}, base, {name:"AES-GCM", length:256}, false, ["decrypt"]);
-  const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:b64u8(env.iv)}, key, b64u8(env.ct));
-  return JSON.parse(new TextDecoder().decode(pt));
-}
-async function unlockPub(){
-  const env = PUB; let fromUrl = "";
-  try { const m = location.hash.match(/^#k=([^&]+)/); if (m){ fromUrl = decodeURIComponent(m[1]); history.replaceState(null,"",location.pathname); } } catch(e){}
-  let saved = ""; try { saved = localStorage.getItem(PASS_KEY) || ""; } catch(e){}
-  for (const p of [fromUrl, saved]) if (p){ try { PUB = await decryptPub(env, p); try { localStorage.setItem(PASS_KEY, p); } catch(e){} return; } catch(e){} }
-  if (saved){ try { localStorage.removeItem(PASS_KEY); } catch(e){} }
-  await new Promise(done=>{
-    const main = document.getElementById("main");
-    const inp = h("input",{class:"i", id:"pass", type:"password", autocomplete:"current-password", autocapitalize:"off", placeholder:"合言葉"});
-    const msg = h("p",{class:"small",style:"margin:0;color:var(--red)"}, saved ? "合言葉が変わりました。社長から届いた新しい合言葉を入れてください。" : "");
-    const btn = h("button",{class:"btn primary", type:"submit"},"開く");
-    const form = h("form",{class:"panel stack", onsubmit:async e=>{ e.preventDefault(); btn.disabled = true; msg.textContent = "";
-      try { PUB = await decryptPub(env, inp.value); try { localStorage.setItem(PASS_KEY, inp.value); } catch(e){} done(); }
-      catch(err){ msg.textContent = "合言葉が違います。社長から届いたLINEを確認してください。"; btn.disabled = false; inp.select(); } }},
-      field("合言葉", inp), msg, btn);
-    main.replaceChildren(h("div",{class:"gate"}, h("p",{class:"eyebrow"},"MOGAMI PARTNER"), h("h1",null,"合言葉を入れてください"),
-      h("p",{class:"muted"},"株式会社もがみの社員・お取引先さま専用です。合言葉は社長からLINEでお知らせしています。一度入れると、この端末では次から入力不要です（合言葉は毎月はじめに変わります）。"), form));
-    inp.focus();
-  });
-}
-
 (async function boot(){
-  if (PUB && PUB.enc) await unlockPub();
   try { const hh = location.hash.replace("#",""); if (ROUTES.some(r=>r.id===hh)) S.route = hh; } catch(e){}
   if (!window.claude || !window.claude.use){ S.conn = "nodb"; guestify(); render(); return; }
   const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
