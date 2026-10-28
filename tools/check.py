@@ -18,6 +18,7 @@
      - 下のタブを全部押して、エラーが出ないか・画面が空にならないか
      - うなぎ診断を最後まで進めて、結果が出るか
      - 診断結果と原価計算の「LINEで送る」を押して、LINEの送信画面が文章つきで開くか
+     - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 営業記録：社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
@@ -177,6 +178,14 @@ if sync_playwright:
                         else:
                             ok("営業記録：訪問を記録して送信")
                             if "まだ送れていない" in pg.inner_text("main"): bad("営業記録：送ったのに「未送信」のまま")
+            # 新しい版の確認（独立版だけ）：同じ版なら「更新」を出さない／違う版なら出す
+            if pg.evaluate("()=>typeof STANDALONE!=='undefined' && STANDALONE && typeof verCheck==='function'"):
+                same = pg.evaluate("()=>verCheck()")
+                html = open(PAGE, encoding="utf8").read()
+                diff = pg.evaluate("(t)=>verCompare(t)", html.replace("/* ============ ページ自身の再発行用", "/* ============ ページ自身の再発行用 x", 1))
+                if same: bad("新しい版の確認：同じ版なのに「新しい版があります」と出る")
+                elif not diff: bad("新しい版の確認：版が変わっても気づけない")
+                else: ok("新しい版の確認")
             # 見積書（社員登録済みの端末で：商品1行で出せる・値引きすると承認待ちで止まる）
             if pg.locator('nav.tabs a[href="#quote"]').count():
                 pg.click('nav.tabs a[href="#quote"]'); pg.wait_for_timeout(400)

@@ -561,7 +561,7 @@ function render(){
   const top = role()==="guest"
     ? h("div",{class:"banner info",style:"margin-bottom:14px"}, h("div",null, "ログインなしで使える「診断」と「原価計算」です。商品データは "+(PUB?.builtAt ? localDate(PUB.builtAt) : "—")+" 時点のものです。"+(STANDALONE ? "お店の情報は、結果画面の「社長にLINEで送る」で顧客カルテに登録できます。" : "記録の保存や顧客カルテは、社員としてログインすると使えます。")))
     : (S.readOnly && role() ? h("div",{class:"banner warn",style:"margin-bottom:14px"},"閲覧専用で開いています。編集するには、管理者に共有レベル（コントリビューター以上）を確認してもらってください。") : "");
-  main.replaceChildren(top, ownerSnapNotice(), installNudge(), view);
+  main.replaceChildren(verBanner(), top, ownerSnapNotice(), installNudge(), view);
 }
 function loginHelpView(){
   return h("div",{class:"gate"},
@@ -2255,6 +2255,58 @@ function recordView(){
 }
 
 
+
+/* ============ 新しい版の確認（独立版） ============ */
+/* 公開ページはスマホに最大10分、開きっぱなしなら何時間でも古いまま残る。商品・単価（1日4回の自動更新）や画面の直しが
+   届いていないと古い単価の見積書が出てしまうので、開いた時・戻ってきた時・30分ごとに、公開中の版と見比べる。 */
+const VER_PUB_TEXT = (()=>{ try { return document.getElementById("pub-data").textContent; } catch(e){ return ""; } })();
+const VER_MARK = "/* ============ ページ自身の再発行用";
+function verParts(html){
+  const pm = html.match(/<script id="pub-data" type="application\/json">([\s\S]*?)<\/script>/);
+  const i = html.indexOf(VER_MARK), j = i >= 0 ? html.indexOf("</"+"script>", i) : -1;
+  return {pub: pm ? pm[1] : null, app: i >= 0 && j > i ? html.slice(i, j) : null};
+}
+/* 公開中のページ（html）が、いま動いている版と違えば true */
+function verCompare(html){
+  const v = verParts(String(html||""));
+  if (v.pub==null || v.app==null) return false;   // 読めない時は「新しい版あり」にしない
+  const runApp = String(APP_JS||"").slice(String(APP_JS||"").indexOf(VER_MARK));
+  return v.pub.trim()!==VER_PUB_TEXT.trim() || v.app.trim()!==runApp.trim();
+}
+let verBusy = false, verLast = 0;
+async function verCheck(){
+  if (!STANDALONE || verBusy || !navigator.onLine) return false;
+  verBusy = true;
+  try {
+    const r = await fetch(location.pathname+"?check="+Date.now(), {cache:"no-store"});
+    if (!r.ok) return false;
+    const fresh = verCompare(await r.text());
+    verLast = Date.now();
+    if (fresh!==!!S.newVersion){ S.newVersion = fresh; scheduleRender(); }
+    return fresh;
+  } catch(e){ return false; } finally { verBusy = false; }
+}
+async function verUpdate(){
+  toast("新しい版を読み込んでいます…");
+  try { await fetch(location.pathname, {cache:"reload"}); } catch(e){}
+  location.replace(location.pathname+"?u="+Date.now()+(S.route ? "#"+S.route : ""));
+}
+function verBanner(){
+  if (!S.newVersion) return "";
+  return h("div",{class:"banner warn noprint",style:"margin-bottom:14px;align-items:center"},
+    h("div",{style:"flex:1"}, h("b",null,"新しい版があります。"), "商品・単価が新しくなっているかもしれません。更新してから使ってください。"),
+    h("button",{class:"btn primary sm", onclick:verUpdate},"更新する"));
+}
+if (STANDALONE){
+  try {
+    if (/[?&]u=\d+/.test(location.search)) history.replaceState(null, "", location.pathname+location.hash);
+    setTimeout(verCheck, 2500);
+    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && Date.now()-verLast > 60000) verCheck(); });
+    window.addEventListener("online", ()=>verCheck());
+    setInterval(()=>{ if (document.visibilityState==="visible") verCheck(); }, 30*60*1000);
+  } catch(e){}
+}
+
 /* ============ 見積書 ============ */
 /* うなぎ代は軽減税率8%、加工賃は10%。加工賃は活鰻1kgあたり。
    白焼は1枚あたり＝（活鰻単価＋白焼加工賃）÷尾数を50円単位に切り上げ（税抜）。見積書では、うなぎ代(8%)と加工賃(10%)に分けて税を計算する。
@@ -2377,7 +2429,7 @@ function quoteView(){
   const q = qtGet(), c = qtCalc(q), appr = qtApproval(q, c), me = recMe();
   const upd = (fn, rr) => { fn(); qtSave(); if (rr!==false) render(); };
   const prods = (S.products||[]).filter(p=>p.sizes && p.sizes.length);
-  const blocked = appr.need && !appr.ok;
+  const blocked = (appr.need && !appr.ok) || !!S.newVersion;
   const ready = q.shop.trim() && c.lines.length && !c.missing;
   const items = q.items.map((it, i)=>{
     const p = prods.find(x=>x.name===it.product), rq = qtRule(it, c.tier), P = pOf(it.size), fee = procOf(it.kind)[2];
@@ -2408,7 +2460,7 @@ function quoteView(){
     h("section",{class:"panel stack"}, field("備考（任意）", h("input",{class:"i", id:"qt-memo", placeholder:"例：納品は毎週火曜", value:q.memo, oninput:e=>{ q.memo = e.target.value; qtSave(); }, onchange:()=>render()})),
       h("p",{class:"small muted",style:"margin:0"}, "1回の量：活鰻 約"+num(c.totalKg,1).replace(/\.0$/,"")+"kg（"+tierLabel(c.tier)+"の価格で計算）"+(c.tier.note ? "　"+c.tier.note : ""))),
     c.missing ? h("div",{class:"banner warn"}, h("div",null,"商品・サイズ・数量がそろっていない行があります。")) : null,
-    blocked ? h("section",{class:"panel stack",style:"border:2px solid var(--red)"},
+    appr.need && !appr.ok ? h("section",{class:"panel stack",style:"border:2px solid var(--red)"},
       h("b",null,"値引きの承認が必要です"),
       h("div",{class:"small"}, c.disc.map(d=>h("div",null,"・"+d.product+" "+d.size+"："+yen(d.rule)+" → "+yen(d.price)+"/kg"))),
       h("div",{class:"small muted"},"社長が承認すると、LINEで承認のリンクが届きます。リンクを開くと、この見積書が出せるようになります。"),
@@ -2417,7 +2469,7 @@ function quoteView(){
         h("div",{class:"stack"}, h("textarea",{class:"i", id:"qt-apr", placeholder:"社長から届いた文章をそのまま全部貼り付け"}),
           h("div",null, h("button",{class:"btn sm primary", onclick:()=>aprImport(document.getElementById("qt-apr").value)},"読み込む"))))) :
       (appr.need && appr.ok ? h("div",{class:"banner info"}, h("div",null,"値引きは社長の承認済みです。")) : null),
-    h("section",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る"), h("div",{class:"small muted"}, blocked ? "値引きの承認が届くまで送れません。" : !ready ? "お店の名前と商品・数量を入れると送れます。" : "PDFにしてLINEで送れます。送ると営業記録の「見積」に自動で入ります。")),
+    h("section",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る"), h("div",{class:"small muted"}, S.newVersion ? "新しい版があります。画面の上の「更新する」を押してから送ってください（古い単価で送らないため）。" : blocked ? "値引きの承認が届くまで送れません。" : !ready ? "お店の名前と商品・数量を入れると送れます。" : "PDFにしてLINEで送れます。送ると営業記録の「見積」に自動で入ります。")),
       h("button",{class:"btn primary", disabled: blocked || !ready, onclick:()=>savePdf({title:"御見積書 "+q.shop.trim(), node:qtDoc(q, c, appr), file:"御見積書_"+q.shop.trim().replace(/[\\/:*?"<>|\s]+/g,"")+"_"+q.no+".pdf", after:()=>qtRecord(q)})}, "見積書をPDFにする"),
       blocked || !ready ? null : h("a",{class:"btn line", href:lineUrl(qtText(q, c)), target:"_blank", rel:"noopener", onclick:()=>{ lineBackupCopy(qtText(q, c)); qtRecord(q); }}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "文章でLINEに送る")),
     h("section",{class:"sec"}, h("h2",null,"見積書のプレビュー"), h("div",{class:"qprev"}, qtDoc(q, c, appr))),
