@@ -19,6 +19,8 @@
      - 下のタブを全部押して、エラーが出ないか・画面が空にならないか
      - うなぎ診断を最後まで進めて、結果が出るか
      - 診断結果と原価計算の「LINEで送る」を押して、LINEの送信画面が文章つきで開くか
+     - ボタン周り：入力した直後の1回目のタップで「PDFで保存」「LINEで送る」が反応するか、
+       「PDFで保存」が2回目以降も固まらずに反応するか
      - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 見積書：うなぎ以外（付属品）・運賃の税率別計算と、運賃なし・付属品値引きの承認
@@ -57,9 +59,16 @@ RULES = [
     (r'location\.href\s*=\s*(u|url|lineUrl)', "LINEなど外部リンクを location.href で開いている（アプリ内表示で止められる）"),
     (r'h\("button",\{class:"btn line[^\n]{0,300}lineUrl', "LINEボタンが button になっている（リンク a にすること）"),
 ]
+# なければ困る作り（消えると再発する）
+MUST = [
+    (r'function flushRender\(', "入力を確定した瞬間に画面を作り直す作りに戻っている（入力直後のボタンが1回目で空振りする）"),
+    (r'c===\"declined\"\) toast\(', "PDF保存の確認で「やめる」を押したときに何も表示されない作りに戻っている"),
+]
+for pat, msg in MUST:
+    if not re.search(pat, src): bad(msg)
 for pat, msg in RULES:
     if re.search(pat, src): bad(msg)
-if not any(re.search(p, src) for p, _ in RULES): ok("再発チェック")
+if not any(re.search(p, src) for p, _ in RULES) and all(re.search(p, src) for p, _ in MUST): ok("再発チェック")
 
 # 4. ブラウザで実際に動かす
 PASS = os.environ.get("MOGAMI_PASS", "")
@@ -125,6 +134,38 @@ if sync_playwright:
             except Exception:
                 bad("%s：「LINEで送る」を押してもLINEが開かない" % where); return False
 
+        def toasts_since(fn, wait=1500):
+            """fn() を実行して、その間に出たトースト（画面下の案内）を全部返す"""
+            pg.evaluate("""()=>{ window.__toasts = []; const host = document.getElementById("toastHost");
+              if (host && !host.__watch){ host.__watch = new MutationObserver(()=>{ const t = host.textContent.trim(); if (t) window.__toasts.push(t); }); host.__watch.observe(host,{childList:true,subtree:true,characterData:true}); } }""")
+            fn(); pg.wait_for_timeout(wait)
+            return pg.evaluate("()=>window.__toasts||[]")
+
+        def button_check(where):
+            """ボタン周り：入力した直後の1回目のタップで反応するか・PDFボタンが固まらないか"""
+            inputs = pg.locator("main input.i:visible, main textarea.i:visible")
+            pdfs = pg.locator("main button:visible", has_text="PDFで保存")
+            if not pdfs.count(): bad("%s：「PDFで保存」ボタンがない" % where); return
+            for i in range(pdfs.count()):
+                btn = pg.locator("main button:visible", has_text="PDFで保存").nth(i)
+                def tap():
+                    if inputs.count():
+                        inp = inputs.first; inp.click(); inp.fill((inp.input_value() or "") + "1")  # 入力した直後（確定前）に
+                    btn.click()                                                                      # ボタンを1回だけ押す
+                t1 = toasts_since(tap)
+                if not t1: bad("%s：入力直後に「PDFで保存」（%d番目）を押しても反応しない（1回目が空振り）" % (where, i + 1)); continue
+                if "PDFを作っています" not in " ".join(t1) and "数字を入れて" not in " ".join(t1):
+                    bad("%s：「PDFで保存」（%d番目）の反応がおかしい（%s）" % (where, i + 1, t1[0][:40])); continue
+                pg.wait_for_timeout(1500)
+                t2 = toasts_since(lambda: pg.locator("main button:visible", has_text="PDFで保存").nth(i).click())
+                if not t2: bad("%s：「PDFで保存」（%d番目）が2回目から反応しない（固まっている）" % (where, i + 1)); continue
+                ok("%s：「PDFで保存」%d番目（入力直後の1回目・2回目とも反応）" % (where, i + 1))
+            # 入力直後の「LINEで送る」も1回目で開くか
+            top_line = pg.locator("main a.btn.line:visible").first
+            if inputs.count() and pg.locator("main a.btn.line:visible").count():
+                inp = inputs.first; inp.click(); inp.fill((inp.input_value() or "") + "1")
+                line_popup(top_line, where + "（入力直後）")
+
         opened = False
         for _pw in (globals().get("PASS_CANDIDATES") or [PASS]):
             pg.goto("about:blank"); pg.goto(base + ("#k=" + urllib.parse.quote(_pw) if _pw else ""))
@@ -159,6 +200,7 @@ if sync_playwright:
                 else:
                     ok("診断を最後まで進めた")
                     line_popup(lines.first, "診断結果")
+                    button_check("診断結果")
             # 原価計算
             if any(h == "#simulator" for h, _ in tabs):
                 pg.click('nav.tabs a[href="#simulator"]'); pg.wait_for_timeout(500)
@@ -174,6 +216,7 @@ if sync_playwright:
                         else: ok("原価計算（結果なし時の案内）")
                 for i in range(pg.locator("main a.btn.line:not(.sm)").count()):
                     line_popup(pg.locator("main a.btn.line:not(.sm)").nth(i), "原価計算（下のボタン%d）" % (i + 1))
+                button_check("原価計算")
             # 営業記録（社員登録 → 訪問を1件記録 → フォームへの送信内容を確認。本物には送らない）
             share = [h for h, l in tabs if h == "#share"]
             if share:

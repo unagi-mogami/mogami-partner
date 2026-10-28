@@ -167,6 +167,12 @@ input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 .list.good li::marker{color:var(--green)}
 .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:var(--sunk);flex:none}
 .rec .thumb{width:88px;height:88px}
+.thumbbtn{padding:0;border:0;background:none;cursor:zoom-in;flex:none;border-radius:8px;position:relative;line-height:0}
+.thumbbtn::after{content:"＋";position:absolute;right:4px;bottom:4px;width:22px;height:22px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font-size:14px;line-height:22px;text-align:center;font-weight:700}
+.lightbox{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));cursor:zoom-out}
+.lightbox img{max-width:100%;max-height:calc(100% - 64px);object-fit:contain;border-radius:8px;background:#111}
+.lightbox .cap{color:#fff;font-size:14px;font-weight:700;text-align:center}
+.lightbox .x{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:12px;width:48px;height:48px;border-radius:999px;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:24px;cursor:pointer}
 
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 table.t{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
@@ -492,6 +498,8 @@ function h(tag, attrs, ...kids){
   if (attrs) for (const [k,v] of Object.entries(attrs)){
     if (v==null || v===false) continue;
     if (k==="class") el.className = v;
+    else if (k==="onchange" && typeof v==="function") el.addEventListener("change", e=>{ inChange++; try { return v(e); } finally { inChange--; } });
+    else if (k==="onclick" && typeof v==="function") el.addEventListener("click", e=>{ flushRender(); return v(e); });
     else if (k.startsWith("on") && typeof v==="function") el.addEventListener(k.slice(2), v);
     else if (k==="style") el.style.cssText = v;
     else if (k==="value") val = v;
@@ -614,7 +622,13 @@ try {
     window.addEventListener("resize", queueStack); window.addEventListener("orientationchange", queueStack); mainEl.addEventListener("toggle", queueStack, true);
   }
 } catch(e){}
+/* 入力欄を離れた瞬間に画面を作り直すと、押したボタンが消えて1回目のタップが空振りする。
+   入力の確定による再描画は少し待ち、ボタンが押されたらその直前に済ませる */
+let inChange = 0, renderTimer = null;
+function flushRender(){ if (renderTimer){ clearTimeout(renderTimer); renderTimer = null; render(); } }
 function render(){
+  if (inChange > 0){ clearTimeout(renderTimer); renderTimer = setTimeout(()=>{ renderTimer = null; render(); }, 450); return; }
+  if (renderTimer){ clearTimeout(renderTimer); renderTimer = null; }
   pending = false;
   renderChrome();
   const main = document.getElementById("main");
@@ -1063,11 +1077,24 @@ function laterSection(R){
         e.q ? h("div",{class:"small"}, "入荷時の目安：", h("b",null, priceText(e.q)+"/kg"), "（税抜・"+tierLabel(e.t)+"）") : null);
     })));
 }
+/* 写真を押すと全画面で大きく表示（どこを押しても閉じる・戻るキー/Escでも閉じる） */
+function showPhoto(src, name){
+  const prev = document.querySelector(".lightbox"); if (prev) prev.remove();
+  const close = () => { box.remove(); document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  const onKey = e => { if (e.key==="Escape") close(); };
+  const box = h("div",{class:"lightbox", role:"dialog", "aria-modal":"true", "aria-label":(name||"商品")+"の写真", onclick:close},
+    h("button",{class:"x", type:"button", "aria-label":"閉じる"},"×"),
+    h("img",{src, alt:(name||"商品")+"の写真"}),
+    name ? h("div",{class:"cap"}, name) : null);
+  document.addEventListener("keydown", onKey);
+  document.body.style.overflow = "hidden";
+  document.body.append(box);
+}
 function recCard(r, i){
   const p = r.p; const [sl, sc] = supplyLabel(p);
   return h("article",{class:"rec"+(i===0?" first":"")},
     h("div",{class:"hd"},
-      prodImg(p) ? h("img",{class:"thumb", src:prodImg(p), alt:p.name+"の写真", loading:"lazy"}) : null,
+      prodImg(p) ? h("button",{class:"thumbbtn", type:"button", "aria-label":p.name+"の写真を大きく見る", onclick:()=>showPhoto(prodImg(p), p.name)}, h("img",{class:"thumb", src:prodImg(p), alt:p.name+"の写真", loading:"lazy"})) : null,
       h("div",{style:"min-width:0"}, h("div",{class:"rank"},"第"+(i+1)+"候補"), h("h3",null,p.name), p.demo ? h("span",{class:"pill demo"},"架空データ") : null),
       h("div",{class:"score"}, h("b",null,r.total), h("small",null, r.unknownPts ? "/100・暫定" : "/100"))),
     estimateBox(p),
@@ -1733,8 +1760,11 @@ function pdfSheet(blob, name, title){
 }
 let pdfBusy = false;
 async function savePdf(custom){
-  if (pdfBusy) return; pdfBusy = true;
-  const {title, node} = custom && custom.node ? custom : printCopy();
+  if (pdfBusy){ toast("PDFを作っています。少しお待ちください"); return; }
+  pdfBusy = true;
+  let title, node;
+  try { ({title, node} = custom && custom.node ? custom : printCopy()); }
+  catch(e){ console.warn(e); pdfBusy = false; toast("PDFを作れませんでした。画面を開き直してお試しください"); return; }
   let area = document.getElementById("print-area"); if (!area){ area = h("div",{id:"print-area"}); document.body.append(area); }
   area.replaceChildren(node); area.style.cssText = "display:block;position:absolute;left:-12000px;top:0;width:760px;background:#fff;color:#000;padding:4px";
   toast("PDFを作っています…");
@@ -1751,10 +1781,19 @@ async function savePdf(custom){
       pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", M, M, W, hpx / pxPerMm);
     }
     const blob = pdf.output("blob"), name = (custom && custom.file) ? custom.file : "MOGAMI_"+title.replace(/[\\/:*?"<>|\s]+/g,"")+"_"+today()+".pdf";
-    if (S.downloads){ await S.downloads.save({filename:name, data:blob}); toast("PDFを保存しました"); }
+    area.replaceChildren(); area.style.cssText = ""; pdfBusy = false;
+    if (S.downloads){
+      try { await S.downloads.save({filename:name, data:blob}); toast("PDFを保存しました"); }
+      catch(e){
+        const c = e && e.code;
+        if (c==="declined") toast("保存をやめました");
+        else if (c==="rate_limited") toast("保存の確認画面が開いています。そちらで「保存」を押してください");
+        else pdfSheet(blob, name, title);
+      }
+    }
     else pdfSheet(blob, name, title);
     if (custom && custom.after) try { custom.after(); } catch(e){}
-  } catch(e){ console.warn(e); if (!(e && e.code==="declined")) toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }
+  } catch(e){ console.warn(e); toast("PDFを作れませんでした。通信状態を確認して、もう一度お試しください"); }
   finally { area.replaceChildren(); area.style.cssText = ""; pdfBusy = false; }
 }
 function canPrintDialog(){ try { return window.self===window.top; } catch(e){ return false; } }
