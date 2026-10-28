@@ -2823,8 +2823,18 @@ async function aprImport(text, quiet){
 }
 /* LINEのリンク（…#apr=…）から開いたとき */
 const APR_FROM_URL = (()=>{ try { const m = location.hash.match(/apr=([A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+)/); if (m){ history.replaceState(null,"",location.pathname); return m[1]; } } catch(e){} return null; })();
-if (APR_FROM_URL){ aprVerify(APR_FROM_URL).then(o=>{ const all = lsGet(QT_APR, {}); all[o.no] = o; lsSet(QT_APR, all); }, ()=>{});   // 合言葉・登録の前でも承認は先に保存しておく
-  const wait = n => { if (document.querySelector("nav.tabs a") && S.products.length) aprImport("apr="+APR_FROM_URL); else if (n < 600) setTimeout(()=>wait(n+1), 500); }; setTimeout(()=>wait(0), 300); }
+/* 以前送ったリンクを、見積書のない画面（LINEの中の画面など）で開いたときは、いつものアプリで読み込むよう案内する */
+function aprWrongPlace(o){
+  const box = h("div",{class:"pdfsheet", role:"dialog", "aria-label":"承認の読み込み方"}, h("div",{class:"panel stack"},
+    h("b",{style:"font-size:17px"},"この画面では承認を反映できません"),
+    h("div",{class:"small"}, "見積番号 "+o.no+"（"+o.shop+"）の見積書は、この画面にはありません。LINEの中の画面や、いつもと違うブラウザで開いた可能性があります。"),
+    h("ol",{class:"steplist"}, h("li",null,"LINEに戻り、承認の文章を長押しして全部コピー"), h("li",null,"いつものアプリ（ホーム画面のMOGAMI PARTNER）を開く"), h("li",null,"「見積書」で「コピーした承認を読み込む」を押す")),
+    h("div",null, h("button",{class:"btn primary", onclick:()=>box.remove()},"わかりました"))));
+  document.body.appendChild(box);
+}
+if (APR_FROM_URL){ aprVerify(APR_FROM_URL).then(o=>{ const all = lsGet(QT_APR, {}); all[o.no] = o; lsSet(QT_APR, all);   // 合言葉・登録の前でも承認は先に保存しておく
+    if (!lsGet(QT_SAVED, {})[o.no]) aprWrongPlace(o); }, ()=>{});
+  const wait = n => { if (document.querySelector("nav.tabs a") && S.products.length){ aprVerify(APR_FROM_URL).then(o=>{ if (lsGet(QT_SAVED, {})[o.no]) aprImport("apr="+APR_FROM_URL); }, ()=>aprImport("apr="+APR_FROM_URL)); } else if (n < 600) setTimeout(()=>wait(n+1), 500); }; setTimeout(()=>wait(0), 300); }
 function qtReqText(q, c){
   const me = recMe();
   const req = {t:"req", no:q.no, shop:q.shop.trim(), by:me?.name||"", items:c.disc.map(d=>({product:d.product, size:d.size, kind:d.kind, price:d.price, rule:d.rule})), kg:Math.round(c.totalKg*100)/100};
@@ -3028,7 +3038,7 @@ function aprOwnerPanel(){
       const body = jEnc({t:"apr", no:A.req.no, shop:A.req.shop, items:A.req.items.map(x=>({product:x.product, size:x.size, kind:x.kind, price:x.price})), by:"社長", at:nowIso()});
       const sig = b64uEnc(new Uint8Array(await crypto.subtle.sign({name:"ECDSA", hash:"SHA-256"}, key, new TextEncoder().encode(body))));
       const code = body+"."+sig;
-      A.reply = "【値引き承認】見積番号 "+A.req.no+"（"+A.req.shop+"）の値引きを承認しました。\nこの文章をコピーして、アプリの「見積書」→「コピーした承認を読み込む」を押してください。\n（またはリンクを開く）\n"+PUBLIC_URL+"?openExternalBrowser=1#apr="+code+"\n\n（リンクが開けない時は、この文章をアプリの「見積書」→「社長からの返事を貼り付ける」に貼ってください）\nMOGAMI-APR:"+code;
+      A.reply = "【値引き承認】見積番号 "+A.req.no+"（"+A.req.shop+"）の値引きを承認しました。\n\n① この文章を長押しして、全部コピー\n② いつものアプリ（MOGAMI PARTNER）の「見積書」で「コピーした承認を読み込む」を押す\n\nMOGAMI-APR:"+code;
       render();
     } catch(e){ toast("承認できませんでした（"+e.message+"）"); }
   };
