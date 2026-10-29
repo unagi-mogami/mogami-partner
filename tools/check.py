@@ -276,6 +276,27 @@ if sync_playwright:
                         else:
                             ok("営業記録：訪問を記録して送信")
                             if "まだ送れていない" in pg.inner_text("main"): bad("営業記録：送ったのに「未送信」のまま")
+                            # 記録を直す（送った記録を直すと、元の記録IDを edit に入れて送り直す。一覧は1件のまま）
+                            n0 = len(sent)
+                            ed = pg.locator("main .log .e button.linkbtn", has_text="直す")
+                            if not ed.count(): bad("営業記録：送った記録に「直す」がない")
+                            else:
+                                ed.first.click(); pg.wait_for_timeout(400)
+                                pg.fill("#rec-memo", "直したメモ")
+                                pg.locator("main button", has_text="直した内容で保存").first.click(); pg.wait_for_timeout(1500)
+                                got = []
+                                for body in sent[n0:]:
+                                    for k, v in urllib.parse.parse_qsl(body):
+                                        if k.startswith("entry."):
+                                            try: got.append(json.loads(v))
+                                            except Exception: pass
+                                e0 = got[-1] if got else None
+                                log_txt = pg.inner_text("main .log")
+                                if not e0: bad("営業記録：直した内容が送られない")
+                                elif not (e0.get("edit") == r0.get("id") and e0.get("memo") == "直したメモ" and e0.get("name") == "チェック 太郎" and e0.get("pin") == "0000" and e0.get("shop") == "チェック用の店" and e0.get("id") != r0.get("id")):
+                                    bad("営業記録：直した記録の中身が正しくない（%s）" % json.dumps(e0, ensure_ascii=False)[:120])
+                                elif log_txt.count("チェック用の店") != 1 or "直したメモ" not in log_txt: bad("営業記録：直したあと一覧が二重になる／直した内容が出ない")
+                                else: ok("営業記録：記録を直す")
                         # 社長からの引き継ぎ（リンクを開く → 自分の記録として送る。宛先が違う時は送れない）
                         if pg.evaluate("()=>typeof mvSeal==='function' && typeof STANDALONE!=='undefined' && STANDALONE"):
                             items = [{"from": "chk-r1", "kind": "diag", "shop": "引継ぎ店", "memo": "引継ぎメモ", "at": "2026-10-01T01:00:00.000Z", "date": "2026-10-01"},

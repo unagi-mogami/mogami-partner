@@ -2473,6 +2473,21 @@ function recMe(){
   const m = lsGet(REC_ME_KEY, null);
   return m && m.name && m.pin && m.sk===STAFF_KEY.v ? m : null;   // 社員コードを入れて登録した端末だけ
 }
+/* 記録を直す：独立版はフォームに追記しかできないので、直した内容を新しい行として送り、edit に元の記録のIDを入れる。
+   読む側（自分の記録・みんなの記録・社長の実績）は、同じ元IDの中で一番新しいものだけを出す。ほかの人が送った直しは使わない。
+   取り消し（cancel）は元のIDを指す（直したあとの記録を取り消しても、全部の版が消える） */
+const recRoot = r => r.edit || r.id;
+const recVer = r => String(r.editedAt || r.at || "");
+function recLatest(list){
+  const owner = new Map(), m = new Map();
+  for (const r of list) if (!r.edit) owner.set(r.id, r.name);
+  for (const r of list){
+    const k = recRoot(r);
+    if (r.edit && owner.has(k) && owner.get(k)!==r.name) continue;
+    const cur = m.get(k); if (!cur || recVer(r) > recVer(cur)) m.set(k, r);
+  }
+  return [...m.values()];
+}
 /* ============ 社員コード（見積書・営業記録は社員だけ） ============ */
 /* 社員コードは親鍵から作り、社長の画面（claude.ai版の「共有」）にだけ表示する。アプリには答え合わせ用の値だけを入れる。
    コードを変えるとき：v を上げ、親鍵から作り直した salt・hash に入れ替える（社員は登録し直し） */
@@ -2552,6 +2567,25 @@ async function recAdd(fields){
   await recFlush();
   return rec;
 }
+/* 記録を直す（写真の追加も）。未送信ならその場で置き換え、送信済みなら直した版を送る（claude.ai版のログイン中はデータベースの同じ記録を上書き） */
+async function recEdit(orig, fields){
+  const me = recMe(); if (!me || !orig) return false;
+  const root = recRoot(orig);
+  const rec = {v:1, at:orig.at, date:orig.date, name:me.name, src: recDb() ? "app" : "standalone", ...fields, editedAt:nowIso()};
+  if (orig.from) rec.from = orig.from;
+  if (me.pin) rec.pin = me.pin; if (me.uid) rec.uid = me.uid;
+  const q = lsGet(REC_Q_KEY, []), qi = q.findIndex(x=>x.id===orig.id);
+  if (qi >= 0){
+    rec.id = orig.id; if (orig.edit) rec.edit = orig.edit;
+    q[qi] = rec; if (!lsSet(REC_Q_KEY, q)){ toast("この端末に保存できませんでした"); return false; }
+  } else {
+    if (recDb() && rec.uid) rec.id = root; else { rec.id = rid()+rid(); rec.edit = root; }
+    q.push(rec);
+    if (!lsSet(REC_Q_KEY, q)){ try { await recPost(rec); } catch(e){ toast("直した内容を送れませんでした。電波の良い所でもう一度押してください"); return false; } }
+  }
+  await recFlush();
+  return rec;
+}
 function recFromScreen(sendText){
   const R = recState();
   /* 診断は「診断」で記録。原価計算・シミュレーターは結果を添付して、記録の種類（訪問・見積など）は社員が選ぶ */
@@ -2565,7 +2599,7 @@ function recMyLog(){
   const me = recMe(); if (!me) return [];
   const all = [...lsGet(REC_Q_KEY, []).map(x=>({...x, unsent:true})), ...lsGet(REC_LOG_KEY, [])];
   const cancelled = new Set(all.filter(x=>x.kind==="cancel").map(x=>x.ref));
-  return all.filter(x=>x.name===me.name && x.kind!=="cancel" && !cancelled.has(x.id));
+  return recLatest(all.filter(x=>x.name===me.name && x.kind!=="cancel" && !cancelled.has(recRoot(x)))).sort((a,b)=>recVer(b).localeCompare(recVer(a)));
 }
 function recEntryPanel(){
   if (!STANDALONE && !S.guest) return null;
@@ -2638,19 +2672,22 @@ async function photoUpload(ph, shop, me, code){
 }
 function photoBlock(R, me){
   const add = async e => {
-    const files = [...(e.target.files||[])].slice(0, PHOTO_MAX - R.photos.length); e.target.value = "";
+    const files = [...(e.target.files||[])].slice(0, PHOTO_MAX - (R.keep||[]).length - R.photos.length); e.target.value = "";
     for (const f of files){ try { R.photos.push({data: await shrinkPhoto(f), type:""}); } catch(err){ toast("写真を読み込めませんでした"); } }
     render();
   };
   return h("div",{class:"f"},
     h("span",{style:"font-size:13px;font-weight:700;color:var(--ink-2)"},"写真（任意・"+PHOTO_MAX+"枚まで）"),
     h("div",{class:"photos"},
+      (R.keep||[]).map((ph,i)=>h("div",{class:"row",style:"border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--sunk)"},
+        h("span",{style:"flex:1"},"📷 送った写真"+(i+1)+(ph.type ? "（"+ph.type+"）" : "")),
+        h("button",{type:"button", class:"linkbtn small", onclick:()=>{ R.keep.splice(i,1); render(); }},"外す"))),
       R.photos.map((ph,i)=>h("div",{class:"ph"},
         h("img",{src:ph.data, alt:"写真"+(i+1)}),
         h("div",{class:"stack",style:"gap:6px"},
           h("div",{class:"types"+(ph.type?"":" need"), role:"radiogroup","aria-label":"写真の種類"}, PHOTO_TYPES.map(t=>h("button",{type:"button", role:"radio","aria-checked":String(ph.type===t), onclick:()=>{ ph.type = t; render(); }}, t))),
           h("button",{type:"button", class:"linkbtn small", onclick:()=>{ R.photos.splice(i,1); render(); }},"この写真を外す")))),
-      R.photos.length < PHOTO_MAX ? h("label",{class:"addph"}, "＋ 写真を撮る・選ぶ", h("input",{type:"file", accept:"image/*", multiple:true, onchange:add})) : null),
+      (R.keep||[]).length + R.photos.length < PHOTO_MAX ? h("label",{class:"addph"}, "＋ 写真を撮る・選ぶ", h("input",{type:"file", accept:"image/*", multiple:true, onchange:add})) : null),
     R.photos.length ? h("span",{class:"small muted",style:"font-weight:400"},"写真ごとに種類を1つ押してください。") : null,
     R.photos.length && STANDALONE && !me.code ? field("社員コード（写真を送るときに一度だけ）", h("input",{class:"i", id:"rec-pcode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードです。次からは入力不要です。") : null);
 }
@@ -2710,7 +2747,7 @@ async function recAllLoad(code, silent){
     if (!j || !j.ok) throw Object.assign(new Error("ng"), {code: j && j.err});
     const all = Array.isArray(j.recs) ? j.recs : [];
     const cancelled = new Set(all.filter(x=>x.kind==="cancel").map(x=>x.name+"|"+x.ref));
-    A.list = all.filter(x=>x && x.id && x.kind!=="cancel" && !cancelled.has(x.name+"|"+x.id)).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+    A.list = recLatest(all.filter(x=>x && x.id && x.kind!=="cancel" && !cancelled.has(x.name+"|"+recRoot(x)))).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
     A.loaded = true;
   } catch(e){
     A.err = e && e.code==="code" ? "社員コードが合いません。社長に確認してください。"
@@ -2742,8 +2779,9 @@ function recAllView(R, me){
           empty: "まだ記録はありません。",
           detail: x => h("div",{class:"stack",style:"gap:8px"},
             x.kind==="deal" ? h("div",{class:"small"}, (x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg") : null,
-            h("div",{class:"small muted"}, fmtDate(x.date||x.at)+"　"+(x.name||"")),
-            recExtras(x, code))
+            h("div",{class:"small muted"}, fmtDate(x.date||x.at)+"　"+(x.name||"")+(x.editedAt ? "（直した）" : "")),
+            recExtras(x, code),
+            x.name===me.name && R.startEdit ? h("div",null, h("button",{class:"btn sm", onclick:()=>R.startEdit(x)},"この記録を直す・写真を足す")) : null)
         })));
 }
 /* 記録する前に：同じお店の、ほかの社員も含めた過去の記録を見せる（独立版。みんなの記録を使う） */
@@ -2963,26 +3001,37 @@ function recordView(){
       try {
         const out = [];
         for (const p of R.photos) out.push(await photoSave(p, f.shop, me, code));
-        f.photos = out;
+        f.photos = [...(R.editing ? R.keep||[] : []), ...out];
       } catch(e){
         R.busy = false; render();
         return toast(e && e.code==="code" ? "社員コードが合いません。社長に確認してください" : "写真を送れませんでした。電波の良い所でもう一度押してください");
       }
     }
+    if (R.editing && !R.photos.length && (R.keep||[]).length) f.photos = [...R.keep];
     R.busy = true; render();
-    const rec = await recAdd(f);
+    const editing = R.editing;
+    const rec = editing ? await recEdit(editing, {...(editing.quote ? {quote:editing.quote} : {}), ...f}) : await recAdd(f);
     R.busy = false;
-    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); }
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を"+(editing ? "直しました" : "記録しました")); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; }
     render();
   };
-  const undo = async x => { if (await recAdd({kind:"cancel", ref:x.id, shop:x.shop})){ toast("取り消しました"); render(); } };
+  const undo = async x => { if (await recAdd({kind:"cancel", ref:recRoot(x), shop:x.shop})){ if (R.editing && recRoot(R.editing)===recRoot(x)) stopEdit(); toast("取り消しました"); render(); } };
+  const startEdit = x => {
+    Object.assign(R, {editing:x, kind:x.kind, shop:x.shop||"", memo:x.memo||"", product:x.product||"", size:x.size||"", kg:x.kg ?? "", price:x.price ?? "",
+      newDeal:x.newDeal===false ? "既存" : "新規", qty:x.qty||"", react:x.react||"", detail:x.detail||"", detailLabel:x.detailLabel||"", photos:[], keep:[...(x.photos||[])]});
+    render(); setTimeout(()=>{ const el = document.getElementById("rec-form"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 50);
+  };
+  R.startEdit = startEdit;
+  const stopEdit = () => { Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; render(); };
   return h("div",{class:"stack"},
     h("div",{class:"pagehead"}, h("h1",null,"営業記録"), h("p",null, me.name+" さん　／　今日 "+fmtDate(today()))),
     unsent ? h("div",{class:"banner warn"}, h("div",null,"まだ送れていない記録が "+unsent+" 件あります。電波の良い所で自動で送ります。 ", h("button",{class:"btn sm", onclick:()=>recFlush().then(()=>render())},"今すぐ送る"))) : null,
     mvInbox(R, me),
     h("div",{class:"kpis"}, REC_KINDS.map(([k,l])=>h("div",{class:"kpi"}, h("div",{class:"l"},"今月の"+l), h("div",{class:"v"}, String(month.filter(x=>x.kind===k).length)), h("div",{class:"d muted"},"件")))),
-    h("section",{class:"panel stack"},
-      h("h2",{style:"font-size:18px"},"記録する"),
+    h("section",{class:"panel stack", id:"rec-form", style: R.editing ? "border:2px solid var(--green-solid)" : null},
+      h("h2",{style:"font-size:18px"}, R.editing ? "記録を直す" : "記録する"),
+      R.editing ? h("div",{class:"banner info"}, h("div",{style:"flex:1"}, fmtDate(R.editing.date||R.editing.at)+" の「"+(REC_LABEL[R.editing.kind]||R.editing.kind)+"」（"+(R.editing.shop||"")+"）を直しています。直したい所を変えて「直した内容で保存」を押してください。写真も足せます。"),
+        h("button",{type:"button", class:"btn sm", onclick:stopEdit},"やめる")) : null,
       field("お店の名前", h("input",{class:"i shopname", id:"rec-shop", list:"rec-shops", placeholder:"例：うなぎ処 ○○", value:R.shop,
         oninput:e=>{ R.shop = e.target.value; clearTimeout(R.hintT); R.hintT = setTimeout(()=>{ const el = document.getElementById("rec-shophint"); if (el) el.replaceWith(shopHint(R, me)); }, 300); }}), shops.length ? "前に記録したお店は候補に出ます" : null),
       shopHint(R, me),
@@ -3006,10 +3055,12 @@ function recordView(){
         h("details",{class:"x"}, h("summary",null,"中身を見る"), h("div",{class:"formula",style:"white-space:pre-wrap"}, R.detail))) : h("p",{class:"small muted",style:"margin:0"},"診断・原価計算・シミュレーターの画面で「営業記録に残す」を押すと、その結果を記録に付けられます。"),
       field("メモ（任意）", memoBox(R), "キーボードのマイクを押して話すと、そのまま文字になります。"),
       photoOn() ? photoBlock(R, me) : null,
-      h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy==="photo" ? "写真を送っています…" : R.busy ? "送っています…" : "記録する"))),
+      h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy==="photo" ? "写真を送っています…" : R.busy ? "送っています…" : R.editing ? "直した内容で保存" : "記録する"),
+        R.editing ? h("button",{class:"btn ghost", style:"margin-left:8px", onclick:stopEdit},"やめる") : null)),
     h("section",{class:"sec"}, h("h2",null,"最近の記録", h("span",{class:"c"},"この端末から送った分")),
       h("div",{class:"log"}, log.length ? log.slice(0,30).map(x=>h("div",{class:"e"},
-        h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null,
+        h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null, x.editedAt ? h("span",{class:"pill line"},"直した") : null,
+          h("button",{class:"linkbtn", onclick:()=>startEdit(x)},"直す"),
           x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
         h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : "")+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : "")+(x.detail ? "　📎"+(x.detailLabel||"結果") : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
     recAllView(R, me),
@@ -3092,7 +3143,7 @@ function resValid(withExcluded){
   const ok = r => r.uid ? true : (list[r.name] && String(list[r.name].pin)===String(r.pin));
   const all = X.recs.filter(ok);
   const cancel = new Set(all.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref));
-  const live0 = all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+r.id) && (withExcluded || !ex[r.id]));
+  const live0 = recLatest(all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+recRoot(r)) && (withExcluded || !(ex[r.id] || ex[recRoot(r)]))));
   /* 社員に引き継いだ社長名義の記録は、社員側の記録（承認済み）があれば数えない */
   const moved = new Set(live0.filter(r=>!r.uid && r.from).map(r=>r.from));
   const live = live0.filter(r=>!(r.uid && moved.has(r.id)));
@@ -3133,7 +3184,10 @@ function qtOwnerList(){
 async function resDelete(r){ return resDeleteMany([r]); }
 async function resDeleteMany(list){
   const X = resState(), doc = X.exclDoc || {ids:{}}, ids = {...(doc.ids||{})}, sent = {...(doc.sent||{})};
-  const rs = list.filter(r=>r && r.id); if (!rs.length) return true;
+  const roots = new Set(list.filter(r=>r && r.id).map(recRoot));
+  const rs = (X.recs||[]).filter(r=>r && r.id && roots.has(recRoot(r)));
+  for (const r of list) if (r && r.id && !rs.some(x=>x.id===r.id)) rs.push(r);
+  if (!rs.length) return true;
   rs.forEach(r=>{ ids[r.id] = nowIso(); });
   if (!(await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_excl").set({ids, sent}), rs.length>1 ? rs.length+"件の記録を削除しました" : "削除しました"))) return false;
   X.exclDoc = {ids, sent}; render();
@@ -3324,7 +3378,7 @@ function resultsView(){
   /* 社員が「取り消す」を押した記録は数えない。社長が「消す」（または承認済みから「外す」）にした名前＋番号は、もう出さない */
   const cancelled = new Set(X.recs.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref)), dis = X.dismissDoc?.keys || {};
   const pend = {}, hidden = {};
-  for (const r of X.recs) if (!r.uid && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
+  for (const r of X.recs) if (!r.uid && !r.edit && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
     const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend; (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
   const pends = Object.values(pend), hiddens = Object.values(hidden);
   const per = [["month","今月"],["last","先月"],["year","今年"],["all","全期間"]];
