@@ -122,6 +122,20 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:70
 label.f .hint{font-weight:400;color:var(--muted);font-size:12px}
 input.i,select.i,textarea.i{width:100%;min-height:46px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:8px 12px;font-weight:400;color:var(--ink)}
 textarea.i{min-height:84px;resize:vertical}
+@media (max-width:899px){input.i,select.i,textarea.i{font-size:16px}}
+textarea.i.grow{min-height:120px;resize:none;overflow:hidden;line-height:1.7}
+.react{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.react button{min-height:52px;border:2px solid var(--line);border-radius:10px;background:var(--surface);font-weight:700;cursor:pointer}
+.react button[aria-checked="true"]{border-color:var(--green-solid);background:var(--green-soft);color:var(--green)}
+.photos{display:flex;flex-direction:column;gap:10px}
+.ph{display:grid;grid-template-columns:84px 1fr;gap:10px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--surface)}
+.ph img{width:84px;height:84px;object-fit:cover;border-radius:8px;background:var(--sunk)}
+.ph .types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.ph .types button{min-height:44px;border:2px solid var(--line);border-radius:8px;background:var(--surface);font-weight:700;cursor:pointer;font-size:14px}
+.ph .types button[aria-checked="true"]{border-color:var(--green-solid);background:var(--green-soft);color:var(--green)}
+.ph .types.need button{border-color:var(--amber)}
+.addph{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;border:2px dashed var(--line);border-radius:10px;font-weight:700;color:var(--ink-2);cursor:pointer;background:var(--surface)}
+.addph input{position:absolute;width:1px;height:1px;opacity:0}
 input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 
 /* 診断 */
@@ -256,6 +270,25 @@ details.x>summary{cursor:pointer;font-weight:700;font-size:14px;padding:6px 0}
 .opt{position:relative}
 .opt .chk{position:absolute;top:10px;right:12px;width:24px;height:24px;border-radius:6px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--on-green);font-size:14px}
 .opt[aria-pressed="true"] .chk{background:var(--green-solid);border-color:var(--green-solid)}
+/* 診断の質問：スマホでもスクロールせずに選べるよう、選択肢を2列にして詰める（文字は読める大きさのまま） */
+@media (max-width:899px){
+  .diagq{gap:10px}
+  .diagq .pagehead{margin-bottom:0}
+  .diagq .pagehead h1{font-size:19px}
+  .diagq .pagehead p{display:none}
+  .diagq .prog{margin-bottom:0}
+  .diagq .steps{margin-bottom:0;gap:4px}
+  .diagq .steps span{font-size:11px;padding:1px 8px}
+  .diagq .qtitle{font-size:22px;margin:0 0 4px}
+  .diagq .qnote{margin:0 0 10px!important}
+  .diagq .qtitle:not(.hasnote){margin-bottom:12px}
+  .diagq .opts{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .diagq .opt{min-height:68px;padding:10px 12px;gap:2px;border-radius:10px}
+  .diagq .opt b{font-size:17px;line-height:1.3}
+  .diagq .opt small{font-size:12px;line-height:1.35}
+  .diagq .opts.multi .opt{padding-right:40px}
+  .diagq .qnav{margin-top:12px}
+}
 .seg.wrap{grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line)}
 .seg.wrap button{border-right:0;background:var(--surface)}
 .seg.wrap button[aria-checked="true"]{background:var(--green-solid);color:var(--on-green)}
@@ -330,6 +363,7 @@ details.memo>summary{font-size:12px;color:var(--muted);font-weight:500}
 #print-area .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px} #print-area .kpi{padding:6px 8px} #print-area .kpi .v{font-size:16px}
 #print-area .cmp{gap:6px} #print-area .cmp .b{height:13px;font-size:9px}
 #print-area .formula{font-size:9px;line-height:1.5;padding:6px 8px}
+#print-area .thumbbtn{cursor:default} #print-area .thumbbtn::after{display:none} #print-area .rec .thumb{width:56px;height:56px}
 #print-area .opts{gap:4px} #print-area .opt{min-height:0;padding:4px 8px}
 @media print{
   @page{margin:10mm}
@@ -793,7 +827,7 @@ function diagnoseView(){
   const q = QUESTIONS[D.step];
   const pct = Math.round((D.step)/QUESTIONS.length*100);
   const cust = S.customers.find(c=>c.id===D.customerId);
-  const wrap = h("div",{class:"stack"});
+  const wrap = h("div",{class:"stack diagq"});
   wrap.append(h("div",{class:"pagehead"}, h("h1",null,"うなぎ自動選定診断"), h("p",null,QUESTIONS.length+"つの質問に答えると、商品マスタと照合しておすすめを最大3件表示します。")));
   if (D.step===0 && can("custView")) wrap.append(h("div",{class:"panel row"},
     h("div",{style:"flex:1;min-width:220px"}, field("どのお客様の診断ですか（任意）", sel(D,"customerId",[["","選択しない（その場で診断）"], ...S.customers.map(c=>[c.id,c.name])], ()=>{
@@ -804,8 +838,8 @@ function diagnoseView(){
   wrap.append(h("div",{class:"prog"}, h("div",{class:"bar",role:"progressbar","aria-valuenow":pct,"aria-valuemin":0,"aria-valuemax":100}, h("i",{style:"width:"+pct+"%"})), h("span",{class:"n"}, (D.step+1)+" / "+QUESTIONS.length)));
   wrap.append(h("div",{class:"steps"}, QUESTIONS.map((x,i)=>h("span",{class: i<D.step?"done": i===D.step?"now":""}, ["調理","タレ","味","脂","皮","身質","サイズ","注文量","重視"][i]))));
   const picked = o => q.multi ? (D.ans[q.key]||[]).includes(o.v) : D.ans[q.key]===o.v;
-  wrap.append(h("div",null, h("div",{class:"qnum"},"質問 "+(D.step+1)), h("h2",{class:"qtitle",style:q.note?"margin-bottom:4px":null}, q.title), q.note ? h("p",{class:"muted small",style:"margin:0 0 16px"}, q.note) : null,
-    h("div",{class:"opts"}, (typeof q.opts==="function" ? q.opts() : q.opts).map(o => h("button",{class:"opt", "aria-pressed": String(picked(o)), onclick:()=>{
+  wrap.append(h("div",null, h("div",{class:"qnum"},"質問 "+(D.step+1)), h("h2",{class:"qtitle"+(q.note?" hasnote":""),style:q.note?"margin-bottom:4px":null}, q.title), q.note ? h("p",{class:"muted small qnote",style:"margin:0 0 16px"}, q.note) : null,
+    h("div",{class:"opts"+(q.multi?" multi":"")}, (typeof q.opts==="function" ? q.opts() : q.opts).map(o => h("button",{class:"opt", "aria-pressed": String(picked(o)), onclick:()=>{
       if (q.multi){ const cur = D.ans[q.key]||[]; D.ans[q.key] = cur.includes(o.v) ? cur.filter(x=>x!==o.v) : [...cur, o.v]; render(); return; }
       D.ans[q.key] = o.v;
       if (D.step < QUESTIONS.length-1) D.step++; else D.showResult = true;
@@ -856,6 +890,7 @@ function resultView(){
     h("div",{style:"flex:1;min-width:200px"}, field("1回の注文量（kg）", h("input",{class:"i", id:"order-kg", type:"number", inputmode:"decimal", min:0, placeholder:"例：8", value: D.kg!=="" && D.kg!=null ? D.kg : (A.orderKg||""), onchange:e=>{D.kg=e.target.value; render();}}), "数字を変えると、販売単価と1回の金額を計算し直します。")),
     S.guest ? null : h("details",{class:"x",style:"flex:1;min-width:200px"}, h("summary",null,"社内向けの条件"),
       field("必要数量（kg／週）", h("input",{class:"i", id:"need-qty", type:"number", inputmode:"decimal", min:0, placeholder:"未入力なら在庫ありで判定", value:D.need, onchange:e=>{D.need=e.target.value; render();}}), "入力すると、納品可能数量が足りない商品を除外します。"))));
+  if (can("pricing") && !S.guest) wrap.append(marginQuickPanel());
   if (S.products.some(p=>p.demo)) wrap.append(h("div",{class:"banner warn"},"商品マスタに架空データが含まれています。実際の提案には、実データに置き換えてから使ってください。"));
   if (!R.top.length) wrap.append(h("div",{class:"panel"}, h("h3",null,"条件に合う商品がありません"), h("p",{class:"muted"},"希望サイズ・在庫・必要数量のいずれかで全商品が除外されました。下の「条件外の商品」で理由を確認してください。")));
   else wrap.append(h("div",{class:"recs"}, R.top.map((r,i)=>recCard(r,i))));
@@ -891,6 +926,47 @@ function resultView(){
     wrap.append(box);
   }
   return wrap;
+}
+/* ============ 診断画面から粗利率をすぐ変える（価格設定の権限がある人だけ） ============ */
+/* 保存先は商品マスタの「発注量別の販売単価」と同じ settings/pricing。保存するとこの画面の単価・粗利にすぐ反映される */
+function marginQuickPanel(){
+  const P = getPricing(), T = P.tiers;
+  if (!S.mgDraft) S.mgDraft = {target: P.targetMargin, pct: T.map(t=>isPct(t) ? t.pct : null)};
+  const M = S.mgDraft, cur = tierFor(diagKg()) || T[0];
+  const ex = 4000;
+  const exText = i => { const v = toNum(M.pct[i]); return v!=null && v>=0 && v<90 ? "例：原価"+yen(ex)+" → "+yen(ceil50(ex/(1-v/100))) : ""; };
+  const summary = T.map(t=>tierLabel(t).replace("未満","")+" "+(isPct(t) ? num(t.pct,1).replace(/\.0$/,"")+"%" : "円")).join("・");
+  const rows = T.map((t,i)=>{
+    const on = Number(t.from)===Number(cur.from);
+    return h("div",{class:"row",style:"justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"},
+      h("div",{style:"min-width:8em"}, h("b",null,tierLabel(t)), on ? h("span",{class:"pill ok",style:"margin-left:6px"},"この注文") : null,
+        h("div",{class:"small muted",id:"mg-ex-"+i}, isPct(t) ? exText(i) : "円の上乗せで設定中（商品マスタで変更）")),
+      isPct(t) ? h("div",{class:"row",style:"gap:6px;flex-wrap:nowrap"},
+        h("input",{class:"i", id:"mg-pct-"+i, type:"number", inputmode:"decimal", style:"width:5.5em;min-height:44px;text-align:right", value: M.pct[i]==null ? "" : M.pct[i],
+          oninput:e=>{ M.pct[i] = e.target.value==="" ? null : Number(e.target.value); const x = document.getElementById("mg-ex-"+i); if (x) x.textContent = exText(i); }}),
+        h("span",null,"%")) : null);
+  });
+  const changed = T.some((t,i)=>isPct(t) && toNum(M.pct[i])!==toNum(t.pct)) || toNum(M.target)!==toNum(P.targetMargin);
+  return h("details",{class:"panel noprint", open: S.mgOpen ? true : null, ontoggle:e=>{ S.mgOpen = e.target.open; }},
+    h("summary",{style:"cursor:pointer;font-weight:700"}, "粗利の設定", h("span",{class:"small muted",style:"font-weight:400;margin-left:8px"}, summary)),
+    h("div",{class:"stack",style:"margin-top:10px"},
+      h("p",{class:"small muted",style:"margin:0"},"注文量ごとの粗利率です。保存すると、この画面の販売単価・粗利にすぐ反映されます。"),
+      h("div",null, rows),
+      field("目標粗利率（%）", h("input",{class:"i", id:"mg-target", type:"number", inputmode:"decimal", style:"width:6.5em;text-align:right", value: M.target==null ? "" : M.target, oninput:e=>{ M.target = e.target.value==="" ? null : Number(e.target.value); }}), "粗利の色分け（緑・黄・赤）の基準"),
+      h("div",{class:"row"},
+        h("button",{class:"btn primary", onclick:saveMarginQuick},"保存して反映"),
+        h("button",{class:"btn ghost", onclick:()=>{ S.mgDraft = null; render(); }},"元に戻す"),
+        S.isOwner && !STANDALONE ? h("span",{class:"small muted"},"社員用アプリへは、保存後に上の「今すぐ反映」で届きます。") : null)));
+}
+async function saveMarginQuick(){
+  const P = getPricing(), M = S.mgDraft; if (!M) return;
+  const T = P.tiers.map(t=>({from:toNum(t.from), to: t.to==null||t.to==="" ? null : toNum(t.to), mode: isPct(t) ? "pct" : "yen", pct: isPct(t) ? toNum(t.pct) : null, low: isPct(t) ? null : toNum(t.low), high: isPct(t) ? null : toNum(t.high)}));
+  for (let i=0;i<T.length;i++){ if (T[i].mode!=="pct") continue;
+    const v = toNum(M.pct[i]); if (v==null || v<0 || v>=90){ toast(tierLabel(T[i])+"：粗利率は0〜90未満の数字で入れてください"); return; }
+    T[i].pct = v; }
+  const tg = toNum(M.target); if (tg==null || tg<=0 || tg>=90){ toast("目標粗利率は0〜90未満の数字で入れてください"); return; }
+  const ok = await write(()=>S.db.doc("settings/pricing").set({targetMargin:tg, maxKg:toNum(P.maxKg) ?? 20, tiers:T, updatedAt:nowIso(), updatedBy:S.uid}),"粗利の設定を保存しました");
+  if (ok){ S.pricing = {...(S.pricing||{}), targetMargin:tg, tiers:T}; S.mgDraft = null; S.pDraft = null; render(); }
 }
 /* ============ 発注量別の販売単価 ============ */
 function getPricing(){ const p = S.pricing || {};
@@ -1823,6 +1899,31 @@ function pdfBlocked(blob, name, title){
       h("button",{class:"btn ghost", type:"button", onclick:close}, "閉じる")));
   document.querySelectorAll(".pdfsheet").forEach(x=>x.remove()); document.body.append(sheet);
 }
+/* 写真入りの画面（診断結果など）もPDFにできるように：写真は先に読み込んで画像データに置き換える。
+   読み込めない写真は外す（写真1枚のせいでPDF全体が作れなくならないように） */
+async function pdfPrepImages(area){
+  const imgs = [...area.querySelectorAll("img")];
+  await Promise.all(imgs.map(async im=>{
+    im.removeAttribute("loading");
+    const src = im.getAttribute("src") || "";
+    if (!src){ (im.closest(".thumbbtn")||im).remove(); return; }
+    if (!src.startsWith("data:")){
+      try {
+        const res = await fetch(src, {credentials:"include"}); if (!res.ok) throw new Error("img "+res.status);
+        const b = await res.blob();
+        im.src = await new Promise((ok, ng)=>{ const fr = new FileReader(); fr.onload = ()=>ok(fr.result); fr.onerror = ng; fr.readAsDataURL(b); });
+      } catch(e){ (im.closest(".thumbbtn")||im).remove(); return; }
+    }
+    try { await Promise.race([im.decode(), new Promise((_,ng)=>setTimeout(()=>ng(new Error("timeout")), 8000))]); }
+    catch(e){ (im.closest(".thumbbtn")||im).remove(); }
+  }));
+}
+/* スマホは大きすぎる画像を作れないので、長い画面は解像度を少し下げる */
+function pdfCanvas(area){
+  const hCss = Math.max(1, area.scrollHeight), wCss = Math.max(1, area.scrollWidth);
+  const scale = Math.max(1, Math.min(2, Math.sqrt(16000000 / (wCss * hCss)), 32000 / hCss));
+  return window.html2canvas(area, {scale, backgroundColor:"#ffffff", useCORS:true, logging:false, imageTimeout:8000});
+}
 let pdfBusy = false;
 async function savePdf(custom){
   if (pdfBusy){ toast("PDFを作っています。少しお待ちください"); return; }
@@ -1836,7 +1937,10 @@ async function savePdf(custom){
   try {
     for (const u of PDF_LIBS) await loadScript(u);
     try { await document.fonts.ready; } catch(e){}
-    const canvas = await window.html2canvas(area, {scale:2, backgroundColor:"#ffffff", useCORS:true, logging:false});
+    await pdfPrepImages(area);
+    let canvas;
+    try { canvas = await pdfCanvas(area); canvas.toDataURL("image/jpeg", 0.1); }
+    catch(e){ console.warn(e); area.querySelectorAll("img").forEach(im=>(im.closest(".thumbbtn")||im).remove()); canvas = await pdfCanvas(area); }
     const pdf = new window.jspdf.jsPDF({unit:"mm", format:"a4", orientation:"portrait"});
     const M = 10, W = 210 - M*2, H = 297 - M*2, pxPerMm = canvas.width / W, pageHpx = Math.floor(H * pxPerMm);
     for (let y = 0, i = 0; y < canvas.height; y += pageHpx, i++){
@@ -2377,7 +2481,17 @@ function staffCodePanel(){
       : h("div",null, h("button",{class:"btn", disabled:st.busy, onclick:show}, st.busy ? "確認しています…" : "社員コードを表示する")),
     st.err ? h("div",{class:"banner warn"}, h("div",null, st.err)) : null);
 }
-const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", reg:{name:"", pin:"", code:""}, busy:false});
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", photos:[], pcode:"", reg:{name:"", pin:"", code:""}, busy:false});
+const MEMO_MAX = 1000;
+const MEMO_PH = "話した内容：\n困っていること：\n次にやること：";
+/* メモ欄：書くほど広がる。キーボードのマイクで話して入れる前提 */
+function growBox(el){ try { el.style.height = "auto"; el.style.height = Math.max(120, el.scrollHeight+2)+"px"; } catch(e){} }
+function memoBox(R){
+  const el = h("textarea",{class:"i grow", id:"rec-memo", rows:4, maxlength:MEMO_MAX, placeholder:MEMO_PH, value:R.memo,
+    oninput:e=>{ R.memo = e.target.value; growBox(e.target); }});
+  requestAnimationFrame(()=>growBox(el));
+  return el;
+}
 const ymKey = iso => String(iso||"").slice(0,7);
 async function recPost(rec){
   if (recDb() && rec.uid){ await S.db.collection("records").doc(rec.id).set(rec); return; }
@@ -2442,13 +2556,58 @@ function recRegisterView(forQuote){
       if (R.busy) return; R.busy = true;
       staffCodeOk(g.code).then(okc => { R.busy = false;
         if (!okc) return toast("社員コードが違います。社長から届いたLINEを確認してください");
-        if (!lsSet(REC_ME_KEY, {name, pin, sk:STAFF_KEY.v})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
+        if (!lsSet(REC_ME_KEY, {name, pin, sk:STAFF_KEY.v, code:normCode(g.code)})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
         R.reg = {name:"", pin:"", code:""}; toast(name+" さんで登録しました"); render(); }); }},
       field("社員コード", h("input",{class:"i", id:"rec-code", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(g,"code")}), "社長からLINEで届いた、社員専用のコードです。"),
       field("名前（フルネーム）", h("input",{class:"i", id:"rec-name", autocomplete:"name", placeholder:"例：山田 太郎", ...bind(g,"name")}), "社長が実績を見るときの名前です。毎回同じ名前にしてください。"),
       field("暗証番号（数字4けた）", h("input",{class:"i", id:"rec-pin", type:"password", inputmode:"numeric", maxlength:4, autocomplete:"off", placeholder:"••••", ...bind(g,"pin")}), "社長から伝えられた番号。ほかの人があなたの名前で記録できないようにするためのものです。"),
       h("div",null, h("button",{class:"btn primary", type:"submit"},"登録する"))),
     h("p",{class:"small muted"},"登録内容はこの端末にだけ保存されます。機種変更したら、もう一度登録してください。"));
+}
+/* ============ 営業記録の写真（独立版）：縮小してGoogleドライブの顧客別フォルダへ ============ */
+/* 送り先は社長のGoogleアカウントで動く中継プログラム（Google Apps Script）。社員コードが合う時だけ保存する。
+   記録には写真のファイルIDと種類だけを残す（写真そのものはドライブ）。URLが空のあいだは写真欄を出さない */
+const REC_PHOTO_URL = "https://script.google.com/macros/s/AKfycbx5yp9W6Au5IizYfsOc1h8J7a0VlEoyk0uRA4uBCTB5_9dWEjrWqeNa-NhbiySHKcGh8Q/exec";
+const PHOTO_TYPES = ["メニュー","名刺","店頭","その他"];
+const PHOTO_MAX = 2;
+const photoOn = () => !!REC_PHOTO_URL && STANDALONE;
+function shrinkPhoto(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res(c.toDataURL("image/jpeg", 0.7));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("img")); };
+    img.src = url;
+  });
+}
+async function photoUpload(ph, shop, me, code){
+  const body = JSON.stringify({code, name:me.name, shop, type:ph.type, data:ph.data.split(",")[1]});
+  const r = await fetch(REC_PHOTO_URL, {method:"POST", body, headers:{"Content-Type":"text/plain;charset=utf-8"}});
+  const j = await r.json();
+  if (!j || !j.ok){ const e = new Error((j && j.err) || "ng"); e.code = j && j.err; throw e; }
+  return j.id;
+}
+function photoBlock(R, me){
+  const add = async e => {
+    const files = [...(e.target.files||[])].slice(0, PHOTO_MAX - R.photos.length); e.target.value = "";
+    for (const f of files){ try { R.photos.push({data: await shrinkPhoto(f), type:""}); } catch(err){ toast("写真を読み込めませんでした"); } }
+    render();
+  };
+  return h("div",{class:"f"},
+    h("span",{style:"font-size:13px;font-weight:700;color:var(--ink-2)"},"写真（任意・"+PHOTO_MAX+"枚まで）"),
+    h("div",{class:"photos"},
+      R.photos.map((ph,i)=>h("div",{class:"ph"},
+        h("img",{src:ph.data, alt:"写真"+(i+1)}),
+        h("div",{class:"stack",style:"gap:6px"},
+          h("div",{class:"types"+(ph.type?"":" need"), role:"radiogroup","aria-label":"写真の種類"}, PHOTO_TYPES.map(t=>h("button",{type:"button", role:"radio","aria-checked":String(ph.type===t), onclick:()=>{ ph.type = t; render(); }}, t))),
+          h("button",{type:"button", class:"linkbtn small", onclick:()=>{ R.photos.splice(i,1); render(); }},"この写真を外す")))),
+      R.photos.length < PHOTO_MAX ? h("label",{class:"addph"}, "＋ 写真を撮る・選ぶ", h("input",{type:"file", accept:"image/*", multiple:true, onchange:add})) : null),
+    R.photos.length ? h("span",{class:"small muted",style:"font-weight:400"},"写真ごとに種類を1つ押してください。") : null,
+    R.photos.length && !me.code ? field("社員コード（写真を送るときに一度だけ）", h("input",{class:"i", id:"rec-pcode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードです。次からは入力不要です。") : null);
 }
 function recordView(){
   const me = recMe();
@@ -2464,7 +2623,12 @@ function recordView(){
     if (!R.shop.trim()) return toast("お店の名前を入れてください");
     const f = {kind:R.kind, shop:R.shop.trim().replace(/\s+/g," "), memo:R.memo.trim()};
     if (R.detail && (R.kind==="diag" || R.kind==="quote")) f.detail = R.detail;
-    if (R.kind==="sample" && R.product) f.product = R.product;
+    if (R.kind==="sample"){
+      if (R.product) f.product = R.product;
+      if (String(R.qty||"").trim()) f.qty = String(R.qty).trim().slice(0,30);
+      if (R.react) f.react = R.react;
+    }
+    f.memo = f.memo.slice(0, MEMO_MAX);
     if (R.kind==="deal"){
       if (!R.product) return toast("成約した商品を選んでください");
       if (!isNum(R.kg) || Number(R.kg)<=0) return toast("1回の数量（kg）を入れてください");
@@ -2472,10 +2636,30 @@ function recordView(){
       if (!R.size) return toast("サイズを選んでください（わからなければ「わからない」）");
       Object.assign(f, {product:R.product, size:R.size, kg:Number(R.kg), price:Number(R.price), newDeal:R.newDeal==="新規"});
     }
+    if (R.photos.length){
+      if (R.photos.some(p=>!p.type)) return toast("写真の種類を選んでください");
+      let code = me.code;
+      if (!code){
+        if (!normCode(R.pcode)) return toast("写真を送るには社員コードを入れてください");
+        R.busy = true; render();
+        const okc = await staffCodeOk(R.pcode); R.busy = false;
+        if (!okc){ render(); return toast("社員コードが違います。社長から届いたLINEを確認してください"); }
+        code = normCode(R.pcode); const m = lsGet(REC_ME_KEY, null); if (m){ m.code = code; lsSet(REC_ME_KEY, m); }
+      }
+      R.busy = "photo"; render();
+      try {
+        const out = [];
+        for (const p of R.photos) out.push({id: await photoUpload(p, f.shop, me, code), type:p.type});
+        f.photos = out;
+      } catch(e){
+        R.busy = false; render();
+        return toast(e && e.code==="code" ? "社員コードが合いません。社長に確認してください" : "写真を送れませんでした。電波の良い所でもう一度押してください");
+      }
+    }
     R.busy = true; render();
     const rec = await recAdd(f);
     R.busy = false;
-    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規"}); }
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[]}); }
     render();
   };
   const undo = async x => { if (await recAdd({kind:"cancel", ref:x.id, shop:x.shop})){ toast("取り消しました"); render(); } };
@@ -2489,7 +2673,12 @@ function recordView(){
       h("datalist",{id:"rec-shops"}, shops.map(x=>h("option",{value:x}))),
       h("div",{class:"seg", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
       R.kind==="quote" && !R.detail ? h("div",{class:"banner info"}, h("div",null,"お客様に渡す見積書を作るなら「見積書」タブへ。見積書を送ると、ここに自動で記録されます。 ", h("button",{class:"btn sm", onclick:()=>{ if (R.shop && !qtGet().shop) qtGet().shop = R.shop; go("quote"); }},"見積書を作る"))) : null,
-      R.kind==="sample" ? field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])) : null,
+      R.kind==="sample" ? h("div",{class:"stack",style:"gap:12px"},
+        h("div",{class:"grid2"},
+          field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])),
+          field("量（任意）", h("input",{class:"i", id:"rec-qty", placeholder:"例：2尾、1kg", maxlength:30, ...bind(R,"qty")}))),
+        h("div",{class:"f"}, h("span",{style:"font-size:13px;font-weight:700;color:var(--ink-2)"},"お店の反応"),
+          h("div",{class:"react", role:"radiogroup","aria-label":"お店の反応"}, ["良い","普通","悪い"].map(v=>h("button",{type:"button", role:"radio","aria-checked":String(R.react===v), onclick:()=>{ R.react = R.react===v ? "" : v; render(); }}, v))))) : null,
       R.kind==="deal" ? h("div",{class:"grid2"},
         field("成約した商品", sel(R,"product",[["","選んでください"], ...prodNames.map(n=>[n,n])])),
         field("サイズ", sel(R,"size",[["","選んでください"], ...SIZES.map(z=>[z,z]), ["any","わからない・混在"]])),
@@ -2497,13 +2686,14 @@ function recordView(){
         field("販売単価（円/kg・税抜）", h("input",{class:"i", id:"rec-price", type:"number", inputmode:"numeric", min:0, placeholder:"例：4300", ...bind(R,"price","num")})),
         field("新規・既存", sel(R,"newDeal",[["新規","新規のお店（初めての取引）"],["既存","既存のお店（新しい商品の採用）"]]))) : null,
       (R.kind==="diag" || R.kind==="quote") && R.detail ? h("details",{class:"x"}, h("summary",null,"記録する内容（画面から取り込み済み）"), h("div",{class:"formula",style:"white-space:pre-wrap"}, R.detail)) : null,
-      field("メモ（任意）", h("input",{class:"i", id:"rec-memo", placeholder:"例：店主不在、来週再訪", ...bind(R,"memo")})),
-      h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy ? "送っています…" : "記録する"))),
+      field("メモ（任意）", memoBox(R), "キーボードのマイクを押して話すと、そのまま文字になります。"),
+      photoOn() ? photoBlock(R, me) : null,
+      h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy==="photo" ? "写真を送っています…" : R.busy ? "送っています…" : "記録する"))),
     h("section",{class:"sec"}, h("h2",null,"最近の記録", h("span",{class:"c"},"この端末から送った分")),
       h("div",{class:"log"}, log.length ? log.slice(0,30).map(x=>h("div",{class:"e"},
         h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null,
           x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
-        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : ""), x.memo ? h("div",{class:"small muted"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : "")+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
     STANDALONE || S.guest ? h("details",{class:"x"}, h("summary",null,"名前・暗証番号を変える"),
       h("div",{class:"panel stack"}, h("p",{class:"small",style:"margin:0"},"登録を消して、もう一度登録します。送った記録は消えません。"),
         h("div",null, h("button",{class:"btn danger sm", onclick:()=>{ try { localStorage.removeItem(REC_ME_KEY); } catch(e){} render(); }},"登録をやり直す")))) : null);
@@ -3248,7 +3438,7 @@ async function unlockPub(){
     subs.push(db.collection("staff").onSnapshot(q=>{ const m={}; q.docs.forEach(d=>m[d.id]=d.data()); S.staff=m; scheduleRender(); }, onErr));
     subs.push(db.collection("products").onSnapshot(q=>{ S.products = q.docs.map(d=>({id:d.id, ...normScale(d.data())})).sort((a,b)=>(a.demo?1:0)-(b.demo?1:0) || String(a.name).localeCompare(String(b.name),"ja")); scheduleRender(); }, onErr));
     subs.push(db.collection("customers").onSnapshot(q=>{ S.customers = q.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja")); scheduleRender(); }, onErr));
-    subs.push(db.doc("settings/pricing").onSnapshot(d=>{ S.pricing = d.exists ? d.data() : null; if (!(document.activeElement && String(document.activeElement.id).startsWith("pr-"))) S.pDraft = null; scheduleRender(); }, onErr));
+    subs.push(db.doc("settings/pricing").onSnapshot(d=>{ S.pricing = d.exists ? d.data() : null; if (!(document.activeElement && String(document.activeElement.id).startsWith("pr-"))) S.pDraft = null; if (!(document.activeElement && String(document.activeElement.id).startsWith("mg-"))) S.mgDraft = null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/extras").onSnapshot(d=>{ S.extras = d.exists ? d.data() : null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/extras_cost").onSnapshot(d=>{ S.extrasCost = d.exists ? d.data() : null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/weights").onSnapshot(d=>{ S.weights = d.exists ? d.data() : null; if (!S.wDraft || !document.activeElement || !String(document.activeElement.id).startsWith("w-")) S.wDraft = null; scheduleRender(); }, onErr));
