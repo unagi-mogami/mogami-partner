@@ -2569,7 +2569,7 @@ function recRegisterView(forQuote){
    記録には写真のファイルIDと種類だけを残す（写真そのものはドライブ）。URLが空のあいだは写真欄を出さない */
 const REC_PHOTO_URL = "https://script.google.com/macros/s/AKfycbx5yp9W6Au5IizYfsOc1h8J7a0VlEoyk0uRA4uBCTB5_9dWEjrWqeNa-NhbiySHKcGh8Q/exec";
 const PHOTO_TYPES = ["メニュー","名刺","店頭","その他"];
-const PHOTO_MAX = 2;
+const PHOTO_MAX = 4;
 /* 独立版の社員と、claude.ai版の社長が使える。社長版は受付係へ送れない時、アプリ内の保存場所（assets）に入れる */
 const photoOwner = () => !STANDALONE && recDb() && S.isOwner;
 const photoOn = () => !!REC_PHOTO_URL && (STANDALONE || photoOwner());
