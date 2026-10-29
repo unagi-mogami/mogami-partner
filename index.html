@@ -1883,7 +1883,11 @@ function quickSend(){
     S.route==="diagnose" ? h("a",{class:"btn line sm", href:"https://line.me/R/share", target:"_blank", rel:"noopener", onclick:e=>{ const R = recommend(S.diag.ans, S.diag.need); if (!R.top.length){ e.preventDefault(); return notYet(); } const t = resultLinkText(R); e.currentTarget.href = lineUrl(t); lineBackupCopy(t); }},
       h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "結果をリンクで送る") : null,
     h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"),
-    recMe() ? h("button",{class:"btn sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); recFromScreen(t); }}, "営業記録に残す") : null);
+    recMe() ? h("button",{class:"btn sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); recFromScreen(t); }}, "営業記録に残す") : null,
+    /* 送り方の使い分け（社員がその場で迷わないように、ボタンのすぐ下に一言） */
+    S.route==="diagnose" ? h("div",{class:"small muted",style:"flex-basis:100%;line-height:1.6"},
+      h("b",null,"結果をリンクで送る"),"：価格なし。まず提案だけ見てほしい時に。", h("br"),
+      h("b",null,"LINEで送る・PDFで保存"),"：価格あり。金額まで伝えたい時に。") : null);
 }
 function sendBox(title, text){
   return h("div",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,title), h("div",{class:"small muted"},"お店側の数字だけを文章にします（もがみの仕入原価・利益は入りません）。")),
