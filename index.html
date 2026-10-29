@@ -2570,7 +2570,19 @@ function recRegisterView(forQuote){
 const REC_PHOTO_URL = "https://script.google.com/macros/s/AKfycbx5yp9W6Au5IizYfsOc1h8J7a0VlEoyk0uRA4uBCTB5_9dWEjrWqeNa-NhbiySHKcGh8Q/exec";
 const PHOTO_TYPES = ["メニュー","名刺","店頭","その他"];
 const PHOTO_MAX = 2;
-const photoOn = () => !!REC_PHOTO_URL && STANDALONE;
+/* 独立版の社員と、claude.ai版の社長が使える。社長版は受付係へ送れない時、アプリ内の保存場所（assets）に入れる */
+const photoOwner = () => !STANDALONE && recDb() && S.isOwner;
+const photoOn = () => !!REC_PHOTO_URL && (STANDALONE || photoOwner());
+function dataUrlBlob(u){ const [h0, b64] = u.split(","); const bin = atob(b64), a = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) a[i] = bin.charCodeAt(i); return new Blob([a], {type: (h0.match(/data:([^;]+)/)||[])[1] || "image/jpeg"}); }
+async function photoSave(ph, shop, me, code){
+  try { if (!code) throw new Error("nocode"); return {id: await photoUpload(ph, shop, me, code), type:ph.type}; }
+  catch(e){
+    if (e && e.code) throw e;                       // 受付係が断った（社員コード違いなど）
+    if (!photoOwner() || !S.assets) throw e;        // 通信できない
+    const a = await S.assets.upload(dataUrlBlob(ph.data));
+    return {asset:a.id, type:ph.type};
+  }
+}
 function shrinkPhoto(file){
   return new Promise((res, rej) => {
     const url = URL.createObjectURL(file), img = new Image();
@@ -2607,7 +2619,7 @@ function photoBlock(R, me){
           h("button",{type:"button", class:"linkbtn small", onclick:()=>{ R.photos.splice(i,1); render(); }},"この写真を外す")))),
       R.photos.length < PHOTO_MAX ? h("label",{class:"addph"}, "＋ 写真を撮る・選ぶ", h("input",{type:"file", accept:"image/*", multiple:true, onchange:add})) : null),
     R.photos.length ? h("span",{class:"small muted",style:"font-weight:400"},"写真ごとに種類を1つ押してください。") : null,
-    R.photos.length && !me.code ? field("社員コード（写真を送るときに一度だけ）", h("input",{class:"i", id:"rec-pcode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードです。次からは入力不要です。") : null);
+    R.photos.length && STANDALONE && !me.code ? field("社員コード（写真を送るときに一度だけ）", h("input",{class:"i", id:"rec-pcode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードです。次からは入力不要です。") : null);
 }
 function recordView(){
   const me = recMe();
@@ -2639,7 +2651,8 @@ function recordView(){
     if (R.photos.length){
       if (R.photos.some(p=>!p.type)) return toast("写真の種類を選んでください");
       let code = me.code;
-      if (!code){
+      if (!code && photoOwner()){ try { code = normCode(await ownerStaffCode()); } catch(e){ code = ""; } }
+      if (!code && STANDALONE){
         if (!normCode(R.pcode)) return toast("写真を送るには社員コードを入れてください");
         R.busy = true; render();
         const okc = await staffCodeOk(R.pcode); R.busy = false;
@@ -2649,7 +2662,7 @@ function recordView(){
       R.busy = "photo"; render();
       try {
         const out = [];
-        for (const p of R.photos) out.push({id: await photoUpload(p, f.shop, me, code), type:p.type});
+        for (const p of R.photos) out.push(await photoSave(p, f.shop, me, code));
         f.photos = out;
       } catch(e){
         R.busy = false; render();
