@@ -63,6 +63,7 @@ RULES = [
 MUST = [
     (r'function flushRender\(', "入力を確定した瞬間に画面を作り直す作りに戻っている（入力直後のボタンが1回目で空振りする）"),
     (r'c===\"declined\"\) toast\(', "PDF保存の確認で「やめる」を押したときに何も表示されない作りに戻っている"),
+    (r'if \(blocked\) return toast\(', "見積書の「PDFにする」が、押せない時に黙って何も起きない作りに戻っている"),
     (r'function pdfBlocked\(', "claude.ai版で保存が許可されていない時に、共有できない画面（反応しない「送る」）を出す作りに戻っている"),
 ]
 for pat, msg in MUST:
@@ -274,9 +275,9 @@ if sync_playwright:
                   const per = Math.ceil((rule+1100)/P/50)*50;
                   const okCalc = c.lines[0] && c.lines[0].up===per && c.total===c.base8+c.base10+Math.floor(c.base8*0.08)+Math.floor(c.base10*0.1);
                   const btn = () => [...document.querySelectorAll("main button")].find(b=>b.textContent.includes("見積書をPDFにする"));
-                  const en1 = btn() && !btn().disabled;
+                  const en1 = btn() && btn().getAttribute("aria-disabled")!=="true";
                   q.items[0].price = String(sellQuote(p,z,c.tier).lo - 100); render();
-                  const en2 = btn() && !btn().disabled;
+                  const en2 = btn() && btn().getAttribute("aria-disabled")!=="true";
                   S.qt = qtBlank(); render();
                   return {okCalc, en1, en2}; }""")
                 if r.get("skip"): ok("見積書：価格のある商品がないので計算の確認は省略")

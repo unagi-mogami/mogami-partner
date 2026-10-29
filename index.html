@@ -97,6 +97,7 @@ nav.tabs a[aria-current="page"] .k{color:var(--green)}
 .btn.danger{color:var(--red);border-color:var(--red)}
 .btn.sm{min-height:38px;padding:0 12px;font-size:13px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.off{opacity:.45}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
 .stack{display:flex;flex-direction:column;gap:14px}
@@ -3013,7 +3014,11 @@ function quoteView(){
           h("div",null, h("button",{class:"btn sm primary", onclick:()=>aprImport(document.getElementById("qt-apr").value)},"読み込む"))))) :
       (appr.need && appr.ok ? h("div",{class:"banner info"}, h("div",null,"値引きは社長の承認済みです。")) : null),
     h("section",{class:"panel row noprint"}, h("div",{style:"flex:1;min-width:220px"}, h("b",null,"お客様に送る"), h("div",{class:"small muted"}, S.newVersion ? "新しい版があります。画面の上の「更新する」を押してから送ってください（古い単価で送らないため）。" : blocked ? "値引きの承認が届くまで送れません。" : !ready ? (c.noDelivery && q.shop.trim() && c.lines.length ? "納品方法を選ぶと送れます。" : "お店の名前と商品・数量・納品方法を入れると送れます。") : "PDFにしてLINEで送れます。送ると営業記録の「見積」に自動で入ります。")),
-      h("button",{class:"btn primary", disabled: blocked || !ready, onclick:()=>savePdf({title:"御見積書 "+q.shop.trim(), node:qtDoc(q, c, appr), file:"御見積書_"+q.shop.trim().replace(/[\\/:*?"<>|\s]+/g,"")+"_"+q.no+".pdf", after:()=>qtRecord(q)})}, "見積書をPDFにする"),
+      h("button",{class:"btn primary"+(blocked || !ready ? " off" : ""), "aria-disabled": blocked || !ready ? "true" : null, onclick:()=>{
+        /* 押せない時も黙らずに理由を出す（灰色のボタンを押しても何も起きないと「反応しない」に見える） */
+        if (blocked) return toast("値引きの承認が届くまでPDFにできません");
+        if (!ready) return toast(c.noDelivery && q.shop.trim() && c.lines.length ? "納品方法を選ぶとPDFにできます" : "お店の名前と商品・数量・納品方法を入れるとPDFにできます");
+        savePdf({title:"御見積書 "+q.shop.trim(), node:qtDoc(q, c, appr), file:"御見積書_"+q.shop.trim().replace(/[\\/:*?"<>|\s]+/g,"")+"_"+q.no+".pdf", after:()=>qtRecord(q)}); }}, "見積書をPDFにする"),
       blocked || !ready ? null : h("a",{class:"btn line", href:lineUrl(qtText(q, c)), target:"_blank", rel:"noopener", onclick:()=>{ lineBackupCopy(qtText(q, c)); qtRecord(q); }}, h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "文章でLINEに送る")),
     h("section",{class:"sec"}, h("h2",null,"見積書のプレビュー"), h("div",{class:"qprev"}, qtDoc(q, c, appr))),
     can("prodEdit") ? h("p",{class:"small muted",style:"margin:0"},"うなぎ以外の品目・単価・運賃は「商品マスタ」で追加・変更できます。 ", h("button",{class:"linkbtn", onclick:()=>go("products")},"商品マスタを開く")) : null,
