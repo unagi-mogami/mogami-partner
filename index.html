@@ -2872,6 +2872,7 @@ async function resLoad(){
   const byId = new Map(); for (const r of recs) if (r && r.id && !byId.has(r.id)) byId.set(r.id, r);
   X.recs = [...byId.values()]; X.err = notes.join(" "); X.loading = false; X.loaded = true;
   await resFixGp(); scheduleRender();
+  resSendDeletes();
 }
 /* 粗利を成約時点の原価で固定する（まだ固定していない成約だけ、いまの原価で計算して保存） */
 async function resFixGp(){
@@ -2921,24 +2922,50 @@ function qtOwnerList(){
 }
 
 /* 社長が「集計から外す」：社長だけのデータ（rec_excl）に印を付けるだけで、元の記録は消さない（元に戻せる） */
-async function resToggleExcl(id){
-  const X = resState(), ids = {...(X.exclDoc?.ids||{})};
-  const was = !!ids[id]; if (was) delete ids[id]; else ids[id] = nowIso();
-  if (await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_excl").set({ids}), was ? "集計に戻しました" : "集計から外しました")){ X.exclDoc = {ids}; render(); }
+/* 記録の削除（社長だけ）：社長の画面からすぐ消し、社員の「みんなの記録」からも消す。
+   スプレッドシートの行と写真は、受付係（Apps Script）が「MOGAMI削除_記録ID」という目印ファイルを見つけて消す。
+   目印は社長のGoogle Driveに作る（Google Driveの接続 create_file）。送れた目印は rec_excl.sent に覚えておく */
+async function resDelete(r){
+  const X = resState(), doc = X.exclDoc || {ids:{}}, ids = {...(doc.ids||{})}, sent = {...(doc.sent||{})};
+  ids[r.id] = nowIso();
+  if (!(await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_excl").set({ids, sent}), "削除しました"))) return;
+  X.exclDoc = {ids, sent}; render();
+  if (r.uid){
+    try { await S.db.collection("records").doc(r.id).delete(); } catch(e){}
+    for (const p of (r.photos||[])) if (p && p.asset && S.assets){ try { await S.assets.delete(p.asset); } catch(e){} }
+  }
+  resSendDeletes();
+}
+let resDelBusy = false;
+async function resSendDeletes(){
+  if (resDelBusy) return; resDelBusy = true;
+  try {
+    const X = resState(), doc = X.exclDoc || {ids:{}}, sent = {...(doc.sent||{})};
+    const sheetIds = new Set((X.recs||[]).filter(x=>!x.uid).map(x=>x.id));
+    const todo = Object.keys(doc.ids||{}).filter(id=>!sent[id] && sheetIds.has(id) && /^[a-z0-9]{6,40}$/i.test(id));
+    if (!todo.length) return;
+    const mcp = await claude.use("mcp"); if (!mcp) return;
+    let n = 0;
+    for (const id of todo){
+      try { await mcp.callTool(REC_DRIVE, "create_file", {title:"MOGAMI削除_"+id, textContent:"MOGAMI PARTNER：この記録を削除", contentMimeType:"text/plain", disableConversionToGoogleType:true}); sent[id] = nowIso(); n++; }
+      catch(e){ break; }
+    }
+    if (n){ const d = {ids:{...(doc.ids||{})}, sent}; try { await S.db.collection("data/users/"+S.uid).doc("rec_excl").set(d); X.exclDoc = d; } catch(e){} }
+  } finally { resDelBusy = false; }
 }
 function resList(){
   const X = resState(), ex = X.exclDoc?.ids || {};
   const who = X.listWho || "";
-  const all = resValid(true).filter(resPeriod).filter(r=>!who || r.name===who).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
-  const names = [...new Set(resValid(true).filter(resPeriod).map(r=>r.name))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const all = resValid().filter(resPeriod).filter(r=>!who || r.name===who).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+  const names = [...new Set(resValid().filter(resPeriod).map(r=>r.name))].sort((a,b)=>a.localeCompare(b,"ja"));
   const lim = X.listLim || 10, gp = X.gpDoc?.map || {};
   return h("section",{class:"sec"}, h("h2",null,"記録の一覧", h("span",{class:"c"}, all.length+"件（この期間）")),
-    h("p",{class:"small muted",style:"margin:0"},"間違いやテストの記録は「集計から外す」を押してください。元の記録は消えないので、「元に戻す」でいつでも戻せます。"),
+    h("p",{class:"small muted",style:"margin:0"},"間違いやテストの記録は「削除」を押してください。社長の画面・社員の「みんなの記録」・集計から消え、写真も削除されます（元に戻せません）。"),
     names.length > 1 ? h("div",{class:"chip-row"}, [["","全員"], ...names.map(n=>[n,n])].map(([v,l])=>h("button",{type:"button","aria-pressed":String(who===v), onclick:()=>{ X.listWho = v; X.listLim = 10; render(); }}, l))) : null,
     h("div",{class:"log"}, all.length ? all.slice(0,lim).map(r=>{ const off = !!ex[r.id];
       return h("div",{class:"e", style: off ? "opacity:.55" : null},
-        h("div",{class:"m"}, h("span",null,fmtDate(r.date||r.at)), h("span",null,r.name), h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind), off ? h("span",{class:"pill warn"},"集計から外し中") : null,
-          h("button",{class:"btn sm "+(off ? "" : "ghost danger"), style:"margin-left:auto;min-height:32px", onclick:()=>resToggleExcl(r.id)}, off ? "元に戻す" : "集計から外す")),
+        h("div",{class:"m"}, h("span",null,fmtDate(r.date||r.at)), h("span",null,r.name), h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind), 
+          h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))),
         h("div",null, h("b",null,r.shop||"（店名なし）"),
           r.kind==="deal" ? "　"+(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "") : (r.product ? "　"+r.product : ""),
           r.kind==="quote" && r.quote ? qtSnapView(r) : null, recExtras(r, ""))); })
@@ -2980,7 +3007,7 @@ function resultsView(){
   /* 社員が「取り消す」を押した記録は数えない。社長が「消す」（または承認済みから「外す」）にした名前＋番号は、もう出さない */
   const cancelled = new Set(X.recs.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref)), dis = X.dismissDoc?.keys || {};
   const pend = {}, hidden = {};
-  for (const r of X.recs) if (!r.uid && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
+  for (const r of X.recs) if (!r.uid && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
     const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend; (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
   const pends = Object.values(pend), hiddens = Object.values(hidden);
   const per = [["month","今月"],["last","先月"],["year","今年"],["all","全期間"]];
