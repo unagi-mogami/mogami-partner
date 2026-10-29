@@ -87,12 +87,16 @@ if _MASTER and m:
     except Exception: pass
 # 社員コード（見積書・営業記録の登録に必要）も親鍵から作る
 STAFF_CODE = ""
+def staff_code(v):
+    """社員コードの第v版（社長が「社員コードを新しくする」と版が上がる。版はページを開いてから STAFF_KEY.v で読む）"""
+    if not _MASTER: return ""
+    import hmac, hashlib
+    _h = hmac.new(_MASTER.encode(), ("mogami-staff:v" + str(v)).encode(), hashlib.sha256).digest()
+    return "".join("abcdefghjkmnpqrstuvwxyz23456789"[_h[i] % 31] for i in range(8))
 if _MASTER:
     try:
-        import hmac, hashlib
         _sv = re.search(r"const STAFF_KEY = \{\"v\":\s*(\d+)", src)
-        _h = hmac.new(_MASTER.encode(), ("mogami-staff:v" + (_sv.group(1) if _sv else "1")).encode(), hashlib.sha256).digest()
-        STAFF_CODE = "".join("abcdefghjkmnpqrstuvwxyz23456789"[_h[i] % 31] for i in range(8))
+        STAFF_CODE = staff_code(_sv.group(1) if _sv else "1")
     except Exception: pass
 try:
     from playwright.sync_api import sync_playwright
@@ -247,6 +251,10 @@ if sync_playwright:
                 if not entry.count(): bad("共有画面に「営業記録」の入口がない")
                 else:
                     entry.first.click(); pg.wait_for_timeout(300)
+                    try:
+                        _v = pg.evaluate("()=>STAFF_KEY.v")
+                        if _MASTER and _v: STAFF_CODE = staff_code(_v)
+                    except Exception: pass
                     # 社員だけ：社員コードが違うと登録できない
                     pg.fill("#rec-name", "チェック 太郎"); pg.fill("#rec-pin", "0000"); pg.fill("#rec-code", "zzzz-zzzz")
                     pg.locator("main button[type=submit]").first.click(); pg.wait_for_timeout(1500)

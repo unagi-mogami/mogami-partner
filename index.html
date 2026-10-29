@@ -2242,6 +2242,7 @@ function guestify(){
   S.products = (PUB.products||[]).map(x=>({...x}));
   S.pricing = {targetMargin:20, maxKg:PUB.pricing?.maxKg ?? 20, tiers:(PUB.pricing?.tiers||DEFAULT_PRICING.tiers).map(t=>({from:t.from, to:t.to, low:0, high:0}))};
   S.weights = PUB.weights || null;
+  applyStaffKey(PUB.staffKey);
   if (!["diagnose","simulator","record","quote","share"].includes(S.route)) S.route = "diagnose";
   return true;
 }
@@ -2260,7 +2261,8 @@ function buildSnapshot(){
       ...(p.img ? {img:p.img} : {})};
   });
   const P = getPricing();
-  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax, cat:extraCat(x)})), ship:getShip()}};
+  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax, cat:extraCat(x)})), ship:getShip()},
+    ...(S.staffKey && Number(S.staffKey.v) > 1 && S.staffKey.salt && S.staffKey.hash ? {staffKey:{v:Number(S.staffKey.v), iter:Number(S.staffKey.iter), salt:S.staffKey.salt, hash:S.staffKey.hash}} : {})};
 }
 const snapKey = o => o ? JSON.stringify({...o, builtAt:undefined}) : "";
 function snapStale(){ return S.isOwner && !S.guest && S.products.length && snapKey(buildSnapshot()) !== snapKey(PUB); }
@@ -2438,6 +2440,7 @@ function shareView(){
     STANDALONE ? null : h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社長用（このclaude.ai版）"),
       h("p",{class:"small",style:"margin:0"},"商品マスタ・価格ルール・顧客カルテの管理と、LINEで届いた内容の取り込みは、このclaude.ai版で行います。社員には送らないでください。")),
     staffCodePanel(),
+    staffLeavePanel(),
     S.isOwner ? backupPanel() : null);
 }
 function backupPanel(){
@@ -2500,17 +2503,44 @@ async function staffCodeOk(code){
     return btoa(String.fromCharCode(...bits)) === STAFF_KEY.hash;
   } catch(e){ return false; }
 }
-/* 社長だけ：親鍵（data/users/me/sync_secret）から今の社員コードを作る */
-async function ownerStaffCode(){
+/* 社員コードの版：アプリに書いた STAFF_KEY が最初の版。社長が「社員コードを新しくする」を押すと settings/staff_key に新しい版が入り、
+   claude.ai版はデータベースから、独立版は自動更新（埋め込みデータ）から受け取る。版が大きい方だけを使う（古い版には戻らない） */
+function applyStaffKey(k){
+  if (!k || !(Number(k.v) > STAFF_KEY.v) || !k.salt || !k.hash || !(Number(k.iter) >= 100000)) return false;
+  Object.assign(STAFF_KEY, {v:Number(k.v), iter:Number(k.iter), salt:String(k.salt), hash:String(k.hash)});
+  return true;
+}
+async function ownerMaster(){
   const d = await S.db.collection("data/users/"+S.uid).doc("sync_secret").get();
   const master = d.exists ? (d.data()||{}).master : null;
   if (!master) throw new Error("鍵が見つかりません");
+  return master;
+}
+async function staffCodeFor(master, v){
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(master), {name:"HMAC", hash:"SHA-256"}, false, ["sign"]);
-  const h = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("mogami-staff:v"+STAFF_KEY.v)));
+  const h = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("mogami-staff:v"+v)));
   const ab = "abcdefghjkmnpqrstuvwxyz23456789"; let s = "";
   for (let i = 0; i < 8; i++) s += ab[h[i] % ab.length];
-  if (!(await staffCodeOk(s))) throw new Error("社員コードが合いません（親鍵が変わった可能性があります）");
   return s.slice(0,4)+"-"+s.slice(4);
+}
+/* 社長だけ：親鍵（data/users/me/sync_secret）から今の社員コードを作る */
+async function ownerStaffCode(){
+  const s = await staffCodeFor(await ownerMaster(), STAFF_KEY.v);
+  if (!(await staffCodeOk(s))) throw new Error("社員コードが合いません（親鍵が変わった可能性があります）");
+  return s;
+}
+/* 社長だけ：社員コードを次の版にする（社員がやめた時）。答え合わせ用の値だけをデータベースに入れ、コードそのものは保存しない */
+async function rotateStaffCode(){
+  const v = STAFF_KEY.v + 1, iter = 250000;
+  const code = await staffCodeFor(await ownerMaster(), v);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(normCode(code)), "PBKDF2", false, ["deriveBits"]);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({name:"PBKDF2", hash:"SHA-256", salt, iterations:iter}, base, 256));
+  const k = {v, iter, salt:btoa(String.fromCharCode(...salt)), hash:btoa(String.fromCharCode(...bits)), at:nowIso()};
+  await S.db.doc("settings/staff_key").set(k);
+  applyStaffKey(k); S.staffKey = k;
+  if (!(await staffCodeOk(code))) throw new Error("新しいコードの確認に失敗しました");
+  return code;
 }
 const staffCodeText = code => "【MOGAMI 社員コード】\n"+code+"\n\nアプリの「見積書」か「営業記録」を開いて、最初の登録で名前・暗証番号と一緒に入れてください。\n※社員専用です。お取引先さまには送らないでください。";
 function staffCodePanel(){
@@ -2525,6 +2555,40 @@ function staffCodePanel(){
       h("div",{class:"row"}, lineButton(staffCodeText(st.code), "社員にLINEで送る"), copyButton(staffCodeText(st.code), "文章をコピー")))
       : h("div",null, h("button",{class:"btn", disabled:st.busy, onclick:show}, st.busy ? "確認しています…" : "社員コードを表示する")),
     st.err ? h("div",{class:"banner warn"}, h("div",null, st.err)) : null);
+}
+/* 社員がやめた時（社長だけ）：手順の説明と「社員コードを新しくする」ボタン */
+const PHOTO_SCRIPT_SETTINGS = "https://script.google.com/home/projects/1EQERIqHUjHP94_tRjxqG3YVqx7IGAGT-cBo7LAHMs85X7_b_3Zev8B2O/settings";
+function staffLeavePanel(){
+  if (!S.isOwner || S.guest || STANDALONE) return null;
+  const L = S.leave || (S.leave = {busy:false, err:"", code:"", ask:false});
+  const go2 = async () => {
+    L.busy = true; L.err = ""; L.ask = false; render();
+    try {
+      L.code = await rotateStaffCode();
+      const r = await fireSync();
+      if (r.ok){ ssSet("mp-sync", {at:Date.now()}); pollSync(); }
+      else L.err = "社員コードは新しくなりましたが、社員用アプリへの反映を始められませんでした（"+r.msg+"）。次の自動更新（"+SYNC_TIMES+"）で届きます。";
+    } catch(e){ L.err = "社員コードを新しくできませんでした（"+(e.message||"エラー")+"）。何も変わっていません。"; }
+    L.busy = false; render();
+  };
+  const steps = [
+    "下の「社員コードを新しくする」を押す（社員用アプリには数分で届きます）。",
+    "新しいコードを、残る社員にだけLINEで送る。全員、営業記録を開くと登録し直しの画面が出るので、新しいコードを入れてもらう（これまでの記録は消えません）。",
+    "写真の受付係のコードも貼り替える：「受付係の設定を開く」→ 下の「スクリプト プロパティ」→ STAFF_CODE の値を新しいコードに変えて保存。※これを忘れると、全員の写真の送信と「みんなの記録」が止まります。"];
+  return h("section",{class:"panel stack"}, h("h2",{style:"font-size:18px"},"社員がやめた時（社長のみ）"),
+    h("p",{class:"small",style:"margin:0"},"社員コードは全員共通です。やめた人のスマホから見積書・営業記録・みんなの記録（全員の記録と写真）を使えなくするには、コードを新しくして、残る社員にだけ送ります。合言葉は毎月変わりますが、お取引先さまにも送っているので、それだけでは止まりません。"),
+    stepList(steps),
+    h("div",{class:"banner warn"}, h("div",null, h("b",null,"「実績」の「承認済みの社員」から、やめた人を「外す」は押さないでください。"), "押すと、その人の過去の記録が実績から消えます。そのままにしておけば過去の実績は残り、コードを変えた後は新しい記録は届きません。")),
+    L.code ? h("div",{class:"stack",style:"gap:8px"},
+        h("div",{class:"banner info"}, h("div",null,"新しい社員コードに変えました。手順2と3を続けてください。")),
+        h("div",{class:"formula",style:"font-size:20px;letter-spacing:.12em;font-weight:700"}, L.code),
+        h("div",{class:"row"}, lineButton(staffCodeText(L.code), "2. 残る社員にLINEで送る"), copyButton(staffCodeText(L.code), "文章をコピー")),
+        h("div",{class:"row"}, h("a",{class:"btn", href:PHOTO_SCRIPT_SETTINGS, target:"_blank", rel:"noopener"},"3. 受付係の設定を開く"), copyButton(L.code, "コードだけコピー")))
+      : L.ask ? h("div",{class:"confirm"}, "社員コードを変えると、残る社員全員が登録し直しになります。変えますか？",
+          h("button",{class:"btn sm danger", onclick:go2},"変える"), h("button",{class:"btn sm", onclick:()=>{ L.ask = false; render(); }},"やめる"))
+      : h("div",null, h("button",{class:"btn danger", disabled:L.busy, onclick:()=>{ L.ask = true; render(); }}, L.busy ? "変えています…" : "1. 社員コードを新しくする")),
+    L.err ? h("div",{class:"banner warn"}, h("div",null, L.err)) : null,
+    h("p",{class:"small muted",style:"margin:0"},"いまの社員コードは第"+STAFF_KEY.v+"版です。"));
 }
 const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", photos:[], pcode:"", detailLabel:"", reg:{name:"", pin:"", code:""}, busy:false});
 const MEMO_MAX = 1000;
@@ -2614,7 +2678,7 @@ function recRegisterView(forQuote){
   if (again && !g.name) g.name = old.name;
   return h("div",{class:"stack",style:"max-width:520px"},
     h("div",{class:"pagehead"}, h("h1",null, forQuote ? "見積書を出すには社員登録" : "営業記録の登録"), h("p",null, forQuote ? "見積書は、もがみの社員の方が使います。見積書に担当者として名前が入るので、最初に一度だけ登録してください。" : "もがみの社員の方だけが使います。最初に一度だけ登録してください。")),
-    again ? h("div",{class:"banner warn"}, h("div",null, old.name+" さん：見積書・営業記録に社員コードが必要になりました。社長から届いた社員コードを入れて、もう一度登録してください（これまでの記録は消えていません）。")) : null,
+    again ? h("div",{class:"banner warn"}, h("div",null, old.name+" さん："+(old.sk ? "社員コードが新しくなりました。社長から届いた新しい社員コードを入れて" : "見積書・営業記録に社員コードが必要になりました。社長から届いた社員コードを入れて")+"、もう一度登録してください（これまでの記録は消えていません）。")) : null,
     h("form",{class:"panel stack", onsubmit:e=>{ e.preventDefault();
       const name = g.name.trim().replace(/\s+/g," "), pin = String(g.pin).trim();
       if (!name) return toast("名前を入れてください");
@@ -3956,6 +4020,7 @@ async function unlockPub(){
     subs.push(db.collection("customers").onSnapshot(q=>{ S.customers = q.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>String(a.name).localeCompare(String(b.name),"ja")); scheduleRender(); }, onErr));
     subs.push(db.doc("settings/pricing").onSnapshot(d=>{ S.pricing = d.exists ? d.data() : null; if (!(document.activeElement && String(document.activeElement.id).startsWith("pr-"))) S.pDraft = null; if (!(document.activeElement && String(document.activeElement.id).startsWith("mg-"))) S.mgDraft = null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/extras").onSnapshot(d=>{ S.extras = d.exists ? d.data() : null; scheduleRender(); }, onErr));
+    subs.push(db.doc("settings/staff_key").onSnapshot(d=>{ S.staffKey = d.exists ? d.data() : null; applyStaffKey(S.staffKey); scheduleRender(); }, onErr));
     subs.push(db.doc("settings/extras_cost").onSnapshot(d=>{ S.extrasCost = d.exists ? d.data() : null; scheduleRender(); }, onErr));
     subs.push(db.doc("settings/weights").onSnapshot(d=>{ S.weights = d.exists ? d.data() : null; if (!S.wDraft || !document.activeElement || !String(document.activeElement.id).startsWith("w-")) S.wDraft = null; scheduleRender(); }, onErr));
     if (S.isOwner) subs.push(db.collection("access_requests").onSnapshot(q=>{ S.requests = q.docs.map(d=>({id:d.id, ...d.data()})); scheduleRender(); }, onErr));

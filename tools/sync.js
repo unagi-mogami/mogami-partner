@@ -54,7 +54,7 @@ global.document = { addEventListener() {}, getElementById() { return { textConte
 global.navigator = { userAgent: "" };
 const run = new Function("PRODS", "SETS", appJs + `
   S.products = PRODS.map(x => ({ id: x.id, ...normScale(x.data) })).sort((a,b)=>(a.demo?1:0)-(b.demo?1:0) || String(a.name).localeCompare(String(b.name),"ja"));
-  S.pricing = SETS.pricing || null; S.weights = SETS.weights || null; S.extras = SETS.extras || null;
+  S.pricing = SETS.pricing || null; S.weights = SETS.weights || null; S.extras = SETS.extras || null; S.staffKey = SETS.staff_key || null;
   return buildSnapshot();`);
 const snap = run(prods, sets);
 const txt = JSON.stringify(snap);
