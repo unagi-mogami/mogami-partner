@@ -1064,6 +1064,49 @@ function resultText(R){
   if (S.products.some(p=>p.demo)) L.push("", "※試作データを含みます");
   return L.join("\n");
 }
+/* ============ 診断結果をリンクで送る（お客様向け・価格や原価は入れない） ============
+   結果の中身はリンクの「#r=」の後ろに入れる（サーバーには届かない）。お客様は合言葉なしで、この結果だけを見られる */
+const rlEnc = str => { const b = new TextEncoder().encode(str); let bin = ""; b.forEach(x=>bin += String.fromCharCode(x)); return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const rlDec = str => new TextDecoder().decode(Uint8Array.from(atob(str.replace(/-/g,"+").replace(/_/g,"/")), c=>c.charCodeAt(0)));
+function resultPayload(R){
+  const A = S.diag.ans, cu = S.customers.find(c=>c.id===S.diag.customerId);
+  const clean = n => String(n||"").replace(/【架空】/,"");
+  return {v:1, d:localDate(nowIso()),
+    shop: ((S.diag.shop?.name||"").trim() || (cu ? cu.name : "")).slice(0,60),
+    cond: [COOK[A.cook], A.tare!=null && A.tare!=="" ? "タレ "+tareText(A.tare) : null, "味 "+lbl(FAT,A.fat), isNum(A.oil) ? "脂 "+lbl(OIL,A.oil) : null, "皮 "+lbl(SKIN,A.skin), "身 "+lbl(FLESH,A.flesh), A.size==="any" ? "サイズおまかせ" : A.size].filter(x=>x!=null).join("／"),
+    prio: prioText(A),
+    recs: R.top.map(r=>({n:clean(r.p.name), o:r.p.origin||"", s:r.total, w:r.reasons.slice(0,3)})),
+    later: (R.later||[]).map(r=>clean(r.p.name)+(r.p.origin ? "（"+r.p.origin+"）" : ""))};
+}
+function resultLink(R){ return PUBLIC_URL + "?openExternalBrowser=1#r=" + rlEnc(JSON.stringify(resultPayload(R))); }
+function resultLinkText(R){
+  const P = resultPayload(R);
+  return "【もがみ うなぎのご提案】" + (P.shop ? "\n" + P.shop + " 様" : "") + "\nお店のご希望に合ううなぎを選びました。こちらからご覧ください。\n" + resultLink(R);
+}
+/* リンクを開いたお客様の画面。中身は外から来た文字なので、文字としてだけ表示する */
+function readResultLink(){
+  try { const m = location.hash.match(/^#r=([A-Za-z0-9_\-]+)/); if (!m) return null;
+    const P = JSON.parse(rlDec(m[1])); if (!P || P.v!==1 || !Array.isArray(P.recs)) return null;
+    const str = (x, n) => String(x==null ? "" : x).slice(0, n);
+    return {d:str(P.d,20), shop:str(P.shop,60), cond:str(P.cond,200), prio:str(P.prio,100),
+      recs:P.recs.slice(0,3).map(r=>({n:str(r&&r.n,80), o:str(r&&r.o,40), s:Math.max(0,Math.min(100,Math.round(Number(r&&r.s)||0))), w:(Array.isArray(r&&r.w) ? r.w : []).slice(0,3).map(x=>str(x,80))})),
+      later:(Array.isArray(P.later) ? P.later : []).slice(0,5).map(x=>str(x,100))};
+  } catch(e){ return null; }
+}
+function resultLinkView(P){
+  document.querySelectorAll("nav.side, nav.tabs").forEach(n=>n.replaceChildren());
+  const who = document.getElementById("who"); if (who) who.replaceChildren();
+  const main = document.getElementById("main");
+  main.replaceChildren(h("div",{class:"stack"},
+    h("div",{class:"pagehead"}, h("h1",null, (P.shop ? P.shop+" 様への" : "") + "うなぎのご提案"), h("p",null, "株式会社もがみ ・ " + P.d)),
+    h("div",{class:"panel stack"}, h("div",{class:"eyebrow"},"お店のご希望"), h("div",null, P.cond), P.prio ? h("div",{class:"small muted"}, "重視：" + P.prio) : null),
+    P.recs.length ? h("div",{class:"recs"}, P.recs.map((r,i)=>h("div",{class:"rec"+(i===0?" first":"")},
+      h("div",{class:"hd"}, h("div",{style:"min-width:0"}, h("div",{class:"rank"}, i===0 ? "いちばんのおすすめ" : "第"+(i+1)+"候補"), h("h3",null, r.n), r.o ? h("div",{class:"small muted"}, r.o) : null),
+        h("div",{class:"score"}, h("b",null, r.s), h("small",null,"/100 ぴったり度"))),
+      r.w.length ? h("ul",{class:"list good"}, r.w.map(x=>h("li",null,x))) : null))) : h("div",{class:"panel"}, "おすすめの商品はありませんでした。担当者にご相談ください。"),
+    P.later.length ? h("div",{class:"panel stack"}, h("b",null,"入荷したらおすすめ（現在は在庫なし）"), h("ul",{class:"list"}, P.later.map(x=>h("li",null,x)))) : null,
+    h("div",{class:"banner info"}, h("div",null,"価格・ご注文・試食のご相談は、担当者までお気軽にどうぞ。株式会社もがみ　TEL 04-7170-5605"))));
+}
 /* 在庫が戻ったらおすすめ：好みには合うが、今は希望サイズの在庫がない商品 */
 function laterSection(R){
   return h("section",{class:"sec"},
@@ -1837,6 +1880,8 @@ function quickSend(){
     h("b",{style:"flex:1 1 7em"},"お客様に送る"),
     h("a",{class:"btn line sm", href:"https://line.me/R/share", target:"_blank", rel:"noopener", onclick:e=>{ const t = currentSendText(); if (!t){ e.preventDefault(); return notYet(); } e.currentTarget.href = lineUrl(t); lineBackupCopy(t); }},
       h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "LINEで送る"),
+    S.route==="diagnose" ? h("a",{class:"btn line sm", href:"https://line.me/R/share", target:"_blank", rel:"noopener", onclick:e=>{ const R = recommend(S.diag.ans, S.diag.need); if (!R.top.length){ e.preventDefault(); return notYet(); } const t = resultLinkText(R); e.currentTarget.href = lineUrl(t); lineBackupCopy(t); }},
+      h("span",{class:"lineicon","aria-hidden":"true"},"LINE"), "結果をリンクで送る") : null,
     h("button",{class:"btn sm", type:"button", onclick:()=>{ if (!currentSendText()) return notYet(); savePdf(); }}, "PDFで保存"),
     recMe() ? h("button",{class:"btn sm", type:"button", onclick:()=>{ const t = currentSendText(); if (!t) return notYet(); recFromScreen(t); }}, "営業記録に残す") : null);
 }
@@ -3176,6 +3221,7 @@ async function unlockPub(){
 }
 
 (async function boot(){
+  const RL = readResultLink(); if (RL){ resultLinkView(RL); return; }
   if (PUB && PUB.enc) await unlockPub();
   try { const hh = location.hash.replace("#",""); if (ROUTES.some(r=>r.id===hh)) S.route = hh; } catch(e){}
   if (!window.claude || !window.claude.use){ S.conn = "nodb"; guestify(); render(); return; }

@@ -203,6 +203,26 @@ if sync_playwright:
                     ok("診断を最後まで進めた")
                     line_popup(lines.first, "診断結果")
                     button_check("診断結果")
+                    # 結果をリンクで送る：LINEに結果のリンクが入り、そのリンクを開くと合言葉なしで結果だけが見え、価格は出ない
+                    link_btn = pg.locator("main a.btn.line", has_text="結果をリンクで送る")
+                    if not link_btn.count(): bad("診断結果：「結果をリンクで送る」がない")
+                    else:
+                        try:
+                            with ctx.expect_page(timeout=5000) as info: link_btn.first.click()
+                            pop = info.value; lu = pop.url; pop.close()
+                            t = (urllib.parse.parse_qs(urllib.parse.urlparse(lu).query).get("text") or [""])[0]
+                            mm = re.search(r"https://unagi-mogami\.github\.io/mogami-partner/\S*#r=([A-Za-z0-9_\-]+)", t)
+                            if not mm: bad("結果をリンクで送る：LINEの文章に結果のリンクが入っていない")
+                            else:
+                                rp = ctx.new_page(); rp.goto("about:blank"); rp.goto(base.split("#")[0] + "#r=" + mm.group(1)); rp.wait_for_timeout(1500)
+                                body = rp.inner_text("main")
+                                if "合言葉" in body: bad("結果のリンク：合言葉を聞かれて結果が見えない")
+                                elif "おすすめ" not in body or rp.locator("main .rec").count() == 0: bad("結果のリンク：開いても結果が出ない")
+                                elif re.search(r"[¥￥]|円|販売単価|原価|/kg", body): bad("結果のリンク：お客様向けの画面に価格が出ている")
+                                else: ok("結果をリンクで送る（合言葉なしで結果だけ・価格なし）")
+                                rp.close()
+                        except Exception as e:
+                            bad("結果をリンクで送る：押してもLINEが開かない")
             # 原価計算
             if any(h == "#simulator" for h, _ in tabs):
                 pg.click('nav.tabs a[href="#simulator"]'); pg.wait_for_timeout(500)
