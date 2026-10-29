@@ -2925,16 +2925,19 @@ function qtOwnerList(){
 /* 記録の削除（社長だけ）：社長の画面からすぐ消し、社員の「みんなの記録」からも消す。
    スプレッドシートの行と写真は、受付係（Apps Script）が「MOGAMI削除_記録ID」という目印ファイルを見つけて消す。
    目印は社長のGoogle Driveに作る（Google Driveの接続 create_file）。送れた目印は rec_excl.sent に覚えておく */
-async function resDelete(r){
+async function resDelete(r){ return resDeleteMany([r]); }
+async function resDeleteMany(list){
   const X = resState(), doc = X.exclDoc || {ids:{}}, ids = {...(doc.ids||{})}, sent = {...(doc.sent||{})};
-  ids[r.id] = nowIso();
-  if (!(await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_excl").set({ids, sent}), "削除しました"))) return;
+  const rs = list.filter(r=>r && r.id); if (!rs.length) return true;
+  rs.forEach(r=>{ ids[r.id] = nowIso(); });
+  if (!(await write(()=>S.db.collection("data/users/"+S.uid).doc("rec_excl").set({ids, sent}), rs.length>1 ? rs.length+"件の記録を削除しました" : "削除しました"))) return false;
   X.exclDoc = {ids, sent}; render();
-  if (r.uid){
+  for (const r of rs) if (r.uid){
     try { await S.db.collection("records").doc(r.id).delete(); } catch(e){}
     for (const p of (r.photos||[])) if (p && p.asset && S.assets){ try { await S.assets.delete(p.asset); } catch(e){} }
   }
   resSendDeletes();
+  return true;
 }
 let resDelBusy = false;
 async function resSendDeletes(){
@@ -3029,15 +3032,15 @@ function resultsView(){
     h("p",{class:"small muted",style:"margin:0"},"訪問→成約は、その期間の成約件数÷訪問件数です。サイズ不明の成約は、その商品で一番安いサイズの原価で計算（粗利は多めに出ます）。"),
     X.loaded ? resList() : null,
     h("section",{class:"sec"}, h("h2",null,"承認待ち・暗証番号の不一致", h("span",{class:"c"}, pends.length+"件")),
-      h("p",{class:"small muted",style:"margin:0"},"独立版の記録は、名前と暗証番号を承認するまで集計に入りません。知らない名前やテストの記録は承認しないでください。"),
+      h("p",{class:"small muted",style:"margin:0"},"独立版の記録は、名前と暗証番号を承認するまで集計に入りません。知らない名前やテストの記録は承認せず「記録ごと消す」を押してください（社員の「みんなの記録」からも消えます）。"),
       h("div",{class:"log"}, pends.length ? pends.map(x=>h("div",{class:"e"},
         h("div",null, h("b",null,x.name), "　記録 "+x.n+" 件", x.known ? h("span",{class:"pill bad",style:"margin-left:6px"},"登録済みの番号と違う") : null),
         h("div",{class:"row"}, x.known ? h("span",{class:"small muted"},"本人が番号を打ち間違えた場合は「この番号で承認」で上書きできます。") : null,
           h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:{pin:String(x.pin), at:nowIso()}})}, x.known ? "この番号で承認" : "社員として承認"),
-          deleteControl("pd:"+x.k, "消す", ()=>resDismiss(x.k, true))))) : h("div",{class:"empty"},"ありません。")),
+          deleteControl("pd:"+x.k, "記録ごと消す", async ()=>{ if (await resDeleteMany(X.recs.filter(r=>!r.uid && r.kind!=="cancel" && r.name+"|"+r.pin===x.k))) resDismiss(x.k, true); })))) : h("div",{class:"empty"},"ありません。")),
       hiddens.length ? h("details",{class:"x"}, h("summary",null,"消した承認待ち（"+hiddens.length+"件）"),
         h("div",{class:"log"}, hiddens.map(x=>h("div",{class:"e"}, h("div",{class:"row"}, h("span",{style:"flex:1"}, h("b",null,x.name), "　記録 "+x.n+" 件"),
-          h("button",{class:"btn sm", onclick:()=>resDismiss(x.k, false)},"承認待ちに戻す")))))) : null),
+          h("button",{class:"btn sm", onclick:()=>resDismiss(x.k, false)},"承認待ちに戻す"), deleteControl("hd:"+x.k, "記録ごと消す", ()=>resDeleteMany(X.recs.filter(r=>!r.uid && r.kind!=="cancel" && r.name+"|"+r.pin===x.k)))))))) : null),
     h("section",{class:"sec"}, h("h2",null,"承認済みの社員", h("span",{class:"c"}, Object.keys(list).length+"人")),
       h("div",{class:"log"}, Object.keys(list).length ? Object.keys(list).sort((a,b)=>a.localeCompare(b,"ja")).map(n=>h("div",{class:"e"},
         h("div",{class:"row"}, h("b",{style:"flex:1"},n), h("span",{class:"small muted"},"暗証番号 ••••"),
