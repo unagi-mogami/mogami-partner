@@ -2462,7 +2462,7 @@ function backupPanel(){
 const REC_FORM = "https://docs.google.com/forms/d/e/1FAIpQLScfU34FYLes3ThWx6U-yBZSgHFdPB4lSQLm2MQqi3m-JCmCUA/formResponse";
 const REC_ENTRY = "entry.1301070373";
 const REC_KINDS = [["visit","訪問"],["diag","診断"],["quote","見積"],["sample","サンプル提供"],["deal","成約"]];
-const REC_LABEL = Object.fromEntries(REC_KINDS);
+const REC_LABEL = Object.fromEntries([...REC_KINDS, ["karte","顧客カルテ"]]);   // karte：社長から引き継いだカルテ情報（件数には数えない）
 const REC_ME_KEY = "mogami.rec.me", REC_Q_KEY = "mogami.rec.queue", REC_LOG_KEY = "mogami.rec.log";
 function lsGet(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
 function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
@@ -2766,6 +2766,161 @@ function shopHint(R, me){
     }},"このお店の記録をすべて見る"))));
   return box;
 }
+/* ============ 記録の引き継ぎ（社長名義の記録・顧客カルテ → 社員の営業記録） ============ */
+/* claude.ai版からはGoogleフォームへ送れないので、社長が「引き継ぎリンク」を作り、社員が自分の端末（独立版）で開いて、本人の名前・暗証番号で送る。
+   中身（お店の住所・電話など）は社員コードから作った鍵で暗号化する（リンクだけでは読めない）。
+   送った記録には元の記録のIDを from で残し、社員の記録が承認されたら、社長名義の元の記録は集計に入れない（二重に数えない） */
+const MV_KEY = "mogami.rec.mv";
+const MV_FIELDS = ["kind","shop","memo","detail","detailLabel","product","size","kg","price","newDeal","qty","react","quote"];
+const mvTok = t => { const m = String(t||"").match(/mv=([A-Za-z0-9_\-]{40,})/); return m ? m[1] : null; };
+(()=>{ try { const t = mvTok(location.hash); if (t){ lsSet(MV_KEY, t); history.replaceState(null,"",location.pathname+location.search); } } catch(e){} })();
+async function mvZip(u8, pack){
+  if (typeof CompressionStream==="undefined" || typeof DecompressionStream==="undefined") return null;
+  const cs = pack ? new CompressionStream("deflate-raw") : new DecompressionStream("deflate-raw");
+  return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(cs)).arrayBuffer());
+}
+async function mvKey(code, salt){
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(normCode(code)), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", hash:"SHA-256", salt, iterations:100000}, base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+async function mvSeal(obj, code){
+  let pt = new TextEncoder().encode(JSON.stringify(obj)), flag = 0;
+  try { const z = await mvZip(pt, true); if (z && z.length < pt.length){ pt = z; flag = 1; } } catch(e){}
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, await mvKey(code, salt), pt));
+  const out = new Uint8Array(29 + ct.length); out[0] = flag; out.set(salt, 1); out.set(iv, 17); out.set(ct, 29);
+  return b64uEnc(out);
+}
+async function mvOpen(tok, code){
+  const b = b64uDec(tok); if (b.length < 30) throw new Error("bad");
+  let pt;
+  try { pt = new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:b.slice(17,29)}, await mvKey(code, b.slice(1,17)), b.slice(29))); }
+  catch(e){ throw Object.assign(new Error("key"), {code:"key"}); }
+  if (b[0]===1){ const z = await mvZip(pt, false); if (!z) throw Object.assign(new Error("zip"), {code:"zip"}); pt = z; }
+  const P = JSON.parse(new TextDecoder().decode(pt));
+  if (!P || P.v!==1 || !Array.isArray(P.items)) throw new Error("bad");
+  return P;
+}
+const isoDay = s => { const d = new Date(s); return isNaN(d) ? today() : d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+function mvFromRec(r){
+  const o = {from:r.id, at:r.at, date:r.date || isoDay(r.at)};
+  for (const k of MV_FIELDS) if (r[k]!=null && r[k]!=="") o[k] = r[k];
+  const ph = (r.photos||[]).filter(p=>p && p.id);   // アプリ内に保存した写真（asset）は社員側で開けないので移さない
+  if (ph.length) o.photos = ph;
+  return o;
+}
+function karteText(c){
+  const L = [["住所",c.address],["電話",c.phone],["メール",c.email],["担当者",c.contactPerson],["焼き方",COOK[c.cook]||c.cook],["サイズ",c.size],["価格帯・取引",c.priceBand],["好み・要望",c.preference],["次にやること",c.nextAction],["期日",c.nextDue]];
+  return L.filter(([,v])=>String(v||"").trim()).map(([k,v])=>k+"："+String(v).trim()).join("\n");
+}
+function mvFromKarte(c){
+  const at = c.updatedAt || c.createdAt || nowIso();
+  return {from:"karte:"+c.id, kind:"karte", shop:c.name, at, date:isoDay(at), detailLabel:"顧客カルテ", detail:karteText(c).slice(0, REC_DETAIL_MAX)};
+}
+const mvText = (to, link) => "【MOGAMI 営業記録の引き継ぎ】\n"+to+" さんへ：社長の記録を、あなたの営業記録に移します。\n社員として登録したスマホで、下のリンクを開いてください。\n"+link+"\n\nホーム画面のアプリで使っている場合：このメッセージを全部コピーして、アプリの「営業記録」→「社長からの引き継ぎを貼り付ける」に貼ってください。\n※社員専用です。ほかの人には送らないでください。";
+function mvState(){ return S.mv || (S.mv = {to:"", pick:{}, link:"", busy:false, err:""}); }
+/* 社長の実績画面：社長名義の記録と顧客カルテを選んで、引き継ぎリンクを作る */
+function mvOwnerPanel(){
+  if (!S.isOwner || S.guest || STANDALONE) return null;
+  const X = resState(), M = mvState();
+  const sent = new Set(X.recs.filter(r=>!r.uid && r.from).map(r=>r.from));
+  const recs = resValid().filter(r=>r.uid===S.uid).sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+  const items = [...recs.map(r=>({key:"r:"+r.id, from:r.id, label:fmtDate(r.date||r.at)+"　"+(REC_LABEL[r.kind]||r.kind)+"　"+r.shop, sub:r.memo ? String(r.memo).replace(/\s+/g," ").slice(0,40) : "", photo:(r.photos||[]).some(p=>p && p.asset), make:()=>mvFromRec(r)})),
+    ...(S.customers||[]).map(c=>({key:"c:"+c.id, from:"karte:"+c.id, label:"顧客カルテ　"+c.name, sub:[c.address, c.phone].filter(Boolean).join("　"), make:()=>mvFromKarte(c)}))];
+  const picked = items.filter(x=>M.pick[x.key]);
+  const make = async () => {
+    const to = M.to.trim().replace(/\s+/g," ");
+    if (!to) return toast("社員の名前を入れてください");
+    if (!picked.length) return toast("引き継ぐ記録を選んでください");
+    M.busy = true; M.err = ""; M.link = ""; render();
+    try {
+      const code = await ownerStaffCode();
+      const out = picked.map(x=>x.make());
+      M.link = shareLink()+"#mv="+(await mvSeal({v:1, to, at:nowIso(), items:out}, code)); M.toName = to; M.n = out.length;
+    } catch(e){ M.err = "引き継ぎリンクを作れませんでした（"+(e.message||"エラー")+"）"; }
+    M.busy = false; render();
+  };
+  return h("section",{class:"sec"}, h("h2",null,"社員の営業記録に移す", h("span",{class:"c"},"社長名義の記録・顧客カルテ")),
+    h("p",{class:"small muted",style:"margin:0"},"選んだ記録とカルテを、社員の営業記録（独立版）に移す「引き継ぎリンク」を作ります。社員が自分のスマホで開くと、その人の名前で記録されます。その人を承認すると、社長名義の元の記録は集計から外れます（二重に数えません）。"),
+    h("div",{class:"panel stack"},
+      field("移す先の社員（独立版で登録した名前と同じに）", h("input",{class:"i", id:"mv-to", list:"mv-names", placeholder:"例：山田 太郎", ...bind(M,"to")})),
+      h("datalist",{id:"mv-names"}, Object.keys(resStaff()).map(n=>h("option",{value:n}))),
+      items.length ? h("div",{class:"stack",style:"gap:6px"},
+        h("div",{class:"row"}, h("button",{type:"button", class:"linkbtn small", onclick:()=>{ items.forEach(x=>{ if (!sent.has(x.from)) M.pick[x.key] = true; }); render(); }},"まだ移していないものを全部選ぶ"),
+          h("button",{type:"button", class:"linkbtn small", onclick:()=>{ M.pick = {}; render(); }},"選ぶのをやめる")),
+        items.map(x=>h("label",{class:"row",style:"gap:8px;align-items:flex-start"},
+          h("input",{type:"checkbox", checked:!!M.pick[x.key], onchange:e=>{ M.pick[x.key] = e.target.checked; M.link = ""; render(); }}),
+          h("span",{style:"flex:1"}, h("b",null,x.label), sent.has(x.from) ? h("span",{class:"pill ok",style:"margin-left:6px"},"社員側に届き済み") : null,
+            x.photo ? h("span",{class:"small muted"},"　（写真は移せません）") : null,
+            x.sub ? h("div",{class:"small muted"}, x.sub) : null))))
+        : h("div",{class:"empty"}, X.loading ? "読み込み中…" : "社長名義の記録・顧客カルテはありません。"),
+      h("div",null, h("button",{class:"btn primary", disabled:M.busy, onclick:make}, M.busy ? "作っています…" : "引き継ぎリンクを作る（"+picked.length+"件）")),
+      M.err ? h("div",{class:"banner warn"}, h("div",null, M.err)) : null,
+      M.link ? h("div",{class:"stack",style:"gap:8px"},
+        h("p",{class:"small",style:"margin:0"}, M.toName+" さん宛て "+M.n+" 件のリンクができました。"+M.toName+" さんにLINEで送ってください。届いたかどうかは、ここで「社員側に届き済み」と出ます（「最新にする」で確認）。"),
+        h("div",{class:"row"}, lineButton(mvText(M.toName, M.link), M.toName+" さんにLINEで送る"), copyButton(mvText(M.toName, M.link), "文章をコピー"))) : null));
+}
+/* 社員の営業記録画面：届いた引き継ぎを開いて、自分の記録として送る（独立版だけ） */
+function mvInbox(R, me){
+  if (!STANDALONE) return null;
+  const I = S.mvIn || (S.mvIn = {P:null, err:"", busy:false, tok:"", paste:""});
+  const tok = lsGet(MV_KEY, null);
+  const pasteBox = () => h("details",{class:"x"}, h("summary",null,"社長からの引き継ぎを貼り付ける"),
+    h("div",{class:"panel stack"},
+      h("textarea",{class:"i", rows:3, placeholder:"社長から届いたLINEのメッセージを、そのまま貼り付け", value:I.paste, oninput:e=>{ I.paste = e.target.value; }}),
+      h("div",null, h("button",{class:"btn sm", onclick:()=>{ const t = mvTok(I.paste); if (!t) return toast("引き継ぎのリンクが見つかりません。メッセージを全部貼り付けてください"); lsSet(MV_KEY, t); I.paste = ""; render(); }},"読み込む"))));
+  if (!tok) return pasteBox();
+  const drop = () => { try { localStorage.removeItem(MV_KEY); } catch(e){} S.mvIn = null; render(); };
+  if (I.tok!==tok){ Object.assign(I, {tok, P:null, err:"", tried:false}); }
+  if (!I.P && !I.err && me.code && !I.tried){
+    I.tried = true;
+    mvOpen(tok, me.code).then(P=>{ I.P = P; }).catch(e=>{ I.err = e && e.code==="key" ? "社員コードが合わないため開けません。社長に作り直しを頼んでください（社員コードが変わった可能性があります）。"
+      : e && e.code==="zip" ? "このスマホのブラウザが古いため開けません。ブラウザを新しくしてください。" : "引き継ぎを読めませんでした。社長に作り直しを頼んでください。"; }).finally(()=>scheduleRender());
+  }
+  const box = (...kids) => h("section",{class:"panel stack",style:"border:2px solid var(--accent, #2a78d6)"}, h("h2",{style:"font-size:18px"},"📥 社長からの記録の引き継ぎ"), ...kids);
+  if (!me.code){
+    const saveCode = async () => {
+      if (!normCode(R.pcode)) return toast("社員コードを入れてください");
+      if (!(await staffCodeOk(R.pcode))) return toast("社員コードが違います。社長から届いたLINEを確認してください");
+      const m = lsGet(REC_ME_KEY, null); if (m){ m.code = normCode(R.pcode); lsSet(REC_ME_KEY, m); }
+      R.pcode = ""; render();
+    };
+    return box(field("社員コード（一度だけ）", h("input",{class:"i", id:"mv-code", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "引き継ぎを開くには、社長から届いた社員コードが必要です。"),
+      h("div",{class:"row"}, h("button",{class:"btn sm primary", onclick:saveCode},"コードを登録して開く"), h("button",{class:"btn sm ghost", onclick:drop},"捨てる")));
+  }
+  if (I.err) return box(h("div",{class:"banner warn"}, h("div",null, I.err)), h("div",null, h("button",{class:"btn sm ghost", onclick:drop},"捨てる")));
+  if (!I.P) return box(h("p",{class:"small muted",style:"margin:0"},"開いています…"));
+  const P = I.P, nk = s => String(s||"").normalize("NFKC").replace(/\s+/g,"");
+  const str = (x, n) => String(x==null ? "" : x).slice(0, n);
+  const items = P.items.filter(x=>x && (REC_LABEL[x.kind]) && str(x.shop,80).trim()).slice(0,200);
+  if (nk(P.to)!==nk(me.name)) return box(h("div",{class:"banner warn"}, h("div",null,"この引き継ぎは「"+str(P.to,40)+"」さん宛てです。いま登録している名前は「"+me.name+"」です。宛先の人のスマホで開いてください。")),
+    h("div",null, h("button",{class:"btn sm ghost", onclick:drop},"捨てる")));
+  const have = new Set([...lsGet(REC_Q_KEY, []), ...lsGet(REC_LOG_KEY, [])].map(x=>x.from).filter(Boolean));
+  const todo = items.filter(x=>!have.has(str(x.from,80)));
+  const accept = async () => {
+    if (I.busy) return; I.busy = true; render();
+    const recs = todo.map(x=>{
+      const r = {v:1, id:rid()+rid(), at:str(x.at,40) || nowIso(), date:/^\d{4}-\d{2}-\d{2}$/.test(x.date||"") ? x.date : isoDay(x.at), name:me.name, src:"standalone", from:str(x.from,80), pin:me.pin};
+      for (const k of MV_FIELDS) if (x[k]!=null) r[k] = typeof x[k]==="string" ? x[k].slice(0, k==="detail" ? REC_DETAIL_MAX : k==="memo" ? MEMO_MAX : 200) : x[k];
+      r.shop = str(x.shop,80).trim();
+      if (Array.isArray(x.photos)) r.photos = x.photos.filter(p=>p && p.id).slice(0,PHOTO_MAX).map(p=>({id:str(p.id,100), type:str(p.type,20)}));
+      return r;
+    });
+    const q = lsGet(REC_Q_KEY, []);
+    if (!lsSet(REC_Q_KEY, [...q, ...recs])){ I.busy = false; render(); return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）"); }
+    try { localStorage.removeItem(MV_KEY); } catch(e){}
+    S.mvIn = null; toast(recs.length+"件を "+me.name+" さんの記録にしました");
+    await recFlush(); render();
+  };
+  return box(
+    h("p",{class:"small",style:"margin:0"}, me.name+" さん宛てに "+items.length+" 件届いています。「私の記録にする」を押すと、"+me.name+" さんの名前で送ります。"),
+    h("div",{class:"log"}, items.slice(0,30).map(x=>h("div",{class:"e"},
+      h("div",{class:"m"}, h("span",null, fmtDate(x.date||x.at)), h("span",{class:"pill line"}, REC_LABEL[x.kind]), have.has(str(x.from,80)) ? h("span",{class:"pill ok"},"記録済み") : null),
+      h("b",null, str(x.shop,80)), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"}, str(x.memo,200)) : null,
+      x.detail ? h("details",{class:"x"}, h("summary",null,"📎 "+str(x.detailLabel||"添付",30)), h("div",{class:"formula",style:"white-space:pre-wrap"}, str(x.detail, REC_DETAIL_MAX))) : null))),
+    h("div",{class:"row"}, todo.length ? h("button",{class:"btn primary", disabled:I.busy, onclick:accept}, I.busy ? "送っています…" : "私の記録にする（"+todo.length+"件）") : h("span",{class:"small muted"},"すべて記録済みです。"),
+      h("button",{class:"btn sm ghost", onclick:drop}, todo.length ? "捨てる" : "閉じる")));
+}
 function recordView(){
   const me = recMe();
   if (!me) return recRegisterView();
@@ -2824,6 +2979,7 @@ function recordView(){
   return h("div",{class:"stack"},
     h("div",{class:"pagehead"}, h("h1",null,"営業記録"), h("p",null, me.name+" さん　／　今日 "+fmtDate(today()))),
     unsent ? h("div",{class:"banner warn"}, h("div",null,"まだ送れていない記録が "+unsent+" 件あります。電波の良い所で自動で送ります。 ", h("button",{class:"btn sm", onclick:()=>recFlush().then(()=>render())},"今すぐ送る"))) : null,
+    mvInbox(R, me),
     h("div",{class:"kpis"}, REC_KINDS.map(([k,l])=>h("div",{class:"kpi"}, h("div",{class:"l"},"今月の"+l), h("div",{class:"v"}, String(month.filter(x=>x.kind===k).length)), h("div",{class:"d muted"},"件")))),
     h("section",{class:"panel stack"},
       h("h2",{style:"font-size:18px"},"記録する"),
@@ -2936,7 +3092,10 @@ function resValid(withExcluded){
   const ok = r => r.uid ? true : (list[r.name] && String(list[r.name].pin)===String(r.pin));
   const all = X.recs.filter(ok);
   const cancel = new Set(all.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref));
-  const live = all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+r.id) && (withExcluded || !ex[r.id]));
+  const live0 = all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+r.id) && (withExcluded || !ex[r.id]));
+  /* 社員に引き継いだ社長名義の記録は、社員側の記録（承認済み）があれば数えない */
+  const moved = new Set(live0.filter(r=>!r.uid && r.from).map(r=>r.from));
+  const live = live0.filter(r=>!(r.uid && moved.has(r.id)));
   const latest = {}; for (const r of live) if (r.kind==="quote" && r.quote?.no){ const k = r.quote.no; if (!latest[k] || String(r.at)>String(latest[k].at)) latest[k] = r; }
   return live.filter(r=>!(r.kind==="quote" && r.quote?.no) || latest[r.quote.no]===r);
 }
@@ -3186,6 +3345,7 @@ function resultsView(){
         : h("tr",null, h("td",{colspan:8, class:"muted"}, X.loading ? "読み込み中…" : "この期間の記録はまだありません。")))),
     h("p",{class:"small muted",style:"margin:0"},"訪問→成約は、その期間の成約件数÷訪問件数です。サイズ不明の成約は、その商品で一番安いサイズの原価で計算（粗利は多めに出ます）。"),
     X.loaded ? resList() : null,
+    X.loaded ? mvOwnerPanel() : null,
     h("section",{class:"sec"}, h("h2",null,"承認待ち・暗証番号の不一致", h("span",{class:"c"}, pends.length+"件")),
       h("p",{class:"small muted",style:"margin:0"},"独立版の記録は、名前と暗証番号を承認するまで集計に入りません。知らない名前やテストの記録は承認せず「記録ごと消す」を押してください（社員の「みんなの記録」からも消えます）。"),
       h("div",{class:"log"}, pends.length ? pends.map(x=>h("div",{class:"e"},

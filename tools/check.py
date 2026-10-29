@@ -276,6 +276,36 @@ if sync_playwright:
                         else:
                             ok("営業記録：訪問を記録して送信")
                             if "まだ送れていない" in pg.inner_text("main"): bad("営業記録：送ったのに「未送信」のまま")
+                        # 社長からの引き継ぎ（リンクを開く → 自分の記録として送る。宛先が違う時は送れない）
+                        if pg.evaluate("()=>typeof mvSeal==='function' && typeof STANDALONE!=='undefined' && STANDALONE"):
+                            items = [{"from": "chk-r1", "kind": "diag", "shop": "引継ぎ店", "memo": "引継ぎメモ", "at": "2026-10-01T01:00:00.000Z", "date": "2026-10-01"},
+                                     {"from": "karte:chk-c1", "kind": "karte", "shop": "引継ぎ店", "detailLabel": "顧客カルテ", "detail": "電話：000", "at": "2026-10-01T02:00:00.000Z", "date": "2026-10-01"}]
+                            for to, should in (("別の 人", False), ("チェック 太郎", True)):
+                                tok = pg.evaluate("([o,c])=>mvSeal(o,c)", [{"v": 1, "to": to, "items": items}, STAFF_CODE])
+                                n0 = len(sent)
+                                pg.goto(base + "?mv=" + str(len(to)) + "#mv=" + tok); pg.wait_for_selector("nav.tabs", timeout=15000); pg.wait_for_timeout(500)
+                                pg.evaluate("()=>go('record')"); pg.wait_for_timeout(1500)
+                                btn = pg.locator("main button", has_text="私の記録にする")
+                                if not should:
+                                    if btn.count(): bad("引き継ぎ：宛先が違うのに送れてしまう")
+                                    elif "さん宛てです" not in pg.inner_text("main"): bad("引き継ぎ：宛先が違う時の案内が出ない")
+                                    else: ok("引き継ぎ：宛先が違う時は送れない")
+                                    pg.locator("main button", has_text="捨てる").first.click(); pg.wait_for_timeout(300)
+                                    continue
+                                if not btn.count(): bad("引き継ぎ：リンクを開いても引き継ぎが出ない"); continue
+                                btn.first.click(); pg.wait_for_timeout(2000)
+                                got = []
+                                for body in sent[n0:]:
+                                    for k, v in urllib.parse.parse_qsl(body):
+                                        if k.startswith("entry."):
+                                            try: got.append(json.loads(v))
+                                            except Exception: pass
+                                fr = {g.get("from"): g for g in got}
+                                if not ("chk-r1" in fr and "karte:chk-c1" in fr): bad("引き継ぎ：2件とも送られていない（%d件）" % len(got))
+                                elif not all(g.get("name") == "チェック 太郎" and g.get("pin") == "0000" and g.get("src") == "standalone" for g in got): bad("引き継ぎ：送った記録の名前・暗証番号が本人のものでない")
+                                elif fr["chk-r1"].get("date") != "2026-10-01" or fr["chk-r1"].get("memo") != "引継ぎメモ": bad("引き継ぎ：元の日付・メモが引き継がれていない")
+                                elif "私の記録にする" in pg.inner_text("main"): bad("引き継ぎ：送ったあとも引き継ぎが残っている")
+                                else: ok("引き継ぎ：本人の記録として送信")
             # 新しい版の確認（独立版だけ）：同じ版なら「更新」を出さない／違う版なら出す
             if pg.evaluate("()=>typeof STANDALONE!=='undefined' && STANDALONE && typeof verCheck==='function'"):
                 same = pg.evaluate("()=>verCheck()")
