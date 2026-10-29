@@ -142,7 +142,7 @@ textarea.i.grow{min-height:120px;resize:none;overflow:hidden;line-height:1.7}
 .pgrid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--sunk);cursor:zoom-in}
 .pgrid figcaption{font-size:11px;color:var(--muted);text-align:center}
 .rx{display:flex;flex-direction:column;gap:4px;margin-top:4px}
-.rfilter{display:flex;flex-direction:column;gap:8px;position:sticky;top:calc(52px + env(safe-area-inset-top,0px));z-index:5;background:var(--paper);padding:8px 0}
+.rfilter{display:flex;flex-direction:column;gap:8px}
 .dgroup{display:flex;flex-direction:column;gap:6px}
 .dhead{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--muted);padding:0 2px}
 .rrow{padding:0!important}
@@ -154,6 +154,17 @@ textarea.i.grow{min-height:120px;resize:none;overflow:hidden;line-height:1.7}
 .chev{font-size:10px;color:var(--muted)}
 .rrow.open{background:var(--sunk)}
 .rbody{padding:0 14px 14px}
+.seg2{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg2 button{border:0;background:transparent;min-height:40px;font-weight:700;cursor:pointer;color:var(--ink-2)}
+.seg2 button[aria-selected="true"]{background:var(--green-solid);color:var(--on-green)}
+.shopcard{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.shopcard.open{border-color:var(--green-mid)}
+.shophead{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;min-height:60px}
+.shophead:focus-visible{outline:3px solid var(--green-mid);outline-offset:-3px}
+.shopstat{display:flex;flex-direction:column;align-items:flex-end;font-size:11px;color:var(--muted);white-space:nowrap}
+.shopstat b{font-size:15px;color:var(--ink)}
+.shopbody{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.shophint{border:1px dashed var(--green-mid);background:var(--green-soft);border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:6px}
 input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 
 /* 診断 */
@@ -1471,6 +1482,7 @@ function customerDetail(){
   wrap.append(logSection(c, "trades", "過去の取引商品", [["productName","商品名","text"],["qty","数量(kg)","number"],["price","単価(円/kg・税抜)","number"]], e=>[e.productName, isNum(e.qty)? num(e.qty)+"kg":"", isNum(e.price)? yen(e.price)+"/kg":""].filter(Boolean).join("　"), "custEdit"));
   wrap.append(logSection(c, "tastings", "試食評価", [["productName","商品名","text"],["rating","評価(1〜5)","number"],["text","コメント","text"]], e=>h("span",null, e.productName, " ", isNum(e.rating)? h("b",null,"★"+e.rating) : "", " ", e.text||""), "logAdd"));
   wrap.append(logSection(c, "claims", "クレーム履歴", [["text","内容","text"],["action","対応","text"]], e=>h("span",null, e.status==="完了" ? h("span",{class:"pill ok"},"完了") : h("span",{class:"pill bad"},"対応中"), " ", e.text, e.action ? "　→ "+e.action : ""), "logAdd", true));
+  wrap.append(karteRecSection(c));
   wrap.append(logSection(c, "contacts", "営業・電話対応履歴", [["kind","種別","select:訪問,電話,メール,配送時,その他"],["text","内容","text"]], e=>h("span",null, h("span",{class:"pill line"},e.kind||"対応"), " ", e.text), "logAdd"));
   if ((c.juChecks||[]).length) wrap.append(h("section",{class:"sec"}, h("h2",null,"鰻重の原価率チェック", h("span",{class:"c"},c.juChecks.length+"件")),
     h("div",{class:"log"}, c.juChecks.map(x=>h("div",{class:"e"},
@@ -2690,8 +2702,8 @@ function recExtras(r, code){
 /* ============ みんなの記録（独立版の社員どうしで見る） ============ */
 /* 受付係（Apps Script）が社長のスプレッドシートを読み、暗証番号などを外して返す。社員コードが合う時だけ */
 function recAllState(){ return S.recAll || (S.recAll = {loaded:false, busy:false, err:"", list:[], who:"", lim:15}); }
-async function recAllLoad(code){
-  const A = recAllState(); if (A.busy) return; A.busy = true; A.err = ""; render();
+async function recAllLoad(code, silent){
+  const A = recAllState(); if (A.busy) return; A.busy = true; if (!silent){ A.err = ""; render(); }
   try {
     const r = await fetch(REC_PHOTO_URL, {method:"POST", body:JSON.stringify({action:"list", code}), headers:{"Content-Type":"text/plain;charset=utf-8"}});
     const j = await r.json();
@@ -2704,8 +2716,9 @@ async function recAllLoad(code){
     A.err = e && e.code==="code" ? "社員コードが合いません。社長に確認してください。"
       : e && (e.code==="old" || e.code==="type") ? "受付係（Apps Script）が古い版です。社長に更新を頼んでください。"
       : "記録を読み込めませんでした。電波の良い所でもう一度押してください。";
+    if (silent) A.err = "";
   }
-  A.busy = false; render();
+  A.busy = false; if (silent) scheduleRender(); else render();
 }
 function recAllView(R, me){
   if (!STANDALONE || !REC_PHOTO_URL) return null;
@@ -2733,13 +2746,33 @@ function recAllView(R, me){
             recExtras(x, code))
         })));
 }
+/* 記録する前に：同じお店の、ほかの社員も含めた過去の記録を見せる（独立版。みんなの記録を使う） */
+function shopHint(R, me){
+  const box = h("div",{id:"rec-shophint"});
+  if (!STANDALONE || !REC_PHOTO_URL || !me.code) return box;
+  const A = recAllState(), name = String(R.shop||"").trim();
+  if (shopKey(name).length < 2) return box;
+  if (!A.loaded && !A.busy && !A.autoTried){ A.autoTried = true; recAllLoad(me.code, true).then(()=>{ const el = document.getElementById("rec-shophint"); if (el) el.replaceWith(shopHint(R, me)); }); }
+  const ms = A.list.filter(x=>sameShop(x.shop, name));
+  if (!ms.length) return box;
+  const staff = [...new Set(ms.map(x=>x.name).filter(Boolean))];
+  box.append(h("div",{class:"shophint"},
+    h("b",null,"📒 このお店の記録 "+ms.length+"件（"+staff.join("、")+"）"),
+    ms.slice(0,3).map(x=>h("div",{class:"small"}, fmtDate(x.date||x.at).slice(5)+"　"+(x.name||"")+"・"+(REC_LABEL[x.kind]||x.kind)+(x.memo ? "　"+String(x.memo).replace(/\s+/g," ").slice(0,36) : ""))),
+    h("div",null, h("button",{type:"button", class:"btn sm", onclick:()=>{
+      const B = (S.br = S.br || {}).all || (S.br.all = {q:"", kind:"", who:"", photo:false, lim:30, open:{}, view:"date", shopOpen:{}});
+      Object.assign(B, {view:"shop", q:name, kind:"", who:"", photo:false, lim:30}); B.shopOpen = {[shopKey(ms[0].shop) || "（店名なし）"]:true};
+      render(); setTimeout(()=>{ const el = document.getElementById("br-q-all"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 50);
+    }},"このお店の記録をすべて見る"))));
+  return box;
+}
 function recordView(){
   const me = recMe();
   if (!me) return recRegisterView();
   const R = recState(), log = recMyLog(), ym = ymKey(nowIso());
   const month = log.filter(x=>ymKey(x.at)===ym);
   const unsent = lsGet(REC_Q_KEY, []).length;
-  const shops = [...new Set(log.map(x=>x.shop).filter(Boolean))].slice(0,30);
+  const shops = [...new Set([...log.map(x=>x.shop), ...recAllState().list.map(x=>x.shop)].filter(Boolean))].slice(0,60);
   const prodNames = (S.products||[]).map(p=>p.name);
   const send = async () => {
     if (R.busy) return;
@@ -2794,7 +2827,9 @@ function recordView(){
     h("div",{class:"kpis"}, REC_KINDS.map(([k,l])=>h("div",{class:"kpi"}, h("div",{class:"l"},"今月の"+l), h("div",{class:"v"}, String(month.filter(x=>x.kind===k).length)), h("div",{class:"d muted"},"件")))),
     h("section",{class:"panel stack"},
       h("h2",{style:"font-size:18px"},"記録する"),
-      field("お店の名前", h("input",{class:"i shopname", id:"rec-shop", list:"rec-shops", placeholder:"例：うなぎ処 ○○", ...bind(R,"shop")}), shops.length ? "前に記録したお店は候補に出ます" : null),
+      field("お店の名前", h("input",{class:"i shopname", id:"rec-shop", list:"rec-shops", placeholder:"例：うなぎ処 ○○", value:R.shop,
+        oninput:e=>{ R.shop = e.target.value; clearTimeout(R.hintT); R.hintT = setTimeout(()=>{ const el = document.getElementById("rec-shophint"); if (el) el.replaceWith(shopHint(R, me)); }, 300); }}), shops.length ? "前に記録したお店は候補に出ます" : null),
+      shopHint(R, me),
       h("datalist",{id:"rec-shops"}, shops.map(x=>h("option",{value:x}))),
       h("div",{class:"seg", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
       R.kind==="quote" && !R.detail ? h("div",{class:"banner info"}, h("div",null,"お客様に渡す見積書を作るなら「見積書」タブへ。見積書を送ると、ここに自動で記録されます。 ", h("button",{class:"btn sm", onclick:()=>{ if (R.shop && !qtGet().shop) qtGet().shop = R.shop; go("quote"); }},"見積書を作る"))) : null,
@@ -2974,8 +3009,12 @@ const WEEK = ["日","月","火","水","木","金","土"];
 function recHay(r){
   return normQ([r.shop, r.name, r.memo, r.product, r.size, r.qty, r.react, r.detail, r.detailLabel, REC_LABEL[r.kind], r.quote?.no, (r.photos||[]).map(p=>p && p.type).join(" ")].filter(Boolean).join(" "));
 }
+/* お店の名前のゆれ（空白・カタカナ/ひらがな・「様」）を吸収して、同じお店かどうかを決める */
+const shopKey = t => normQ(t).replace(/[\s・･\-ー－]/g,"").replace(/(様|さま)$/,"");
+function sameShop(a, b){ const x = shopKey(a), y = shopKey(b); return !!x && !!y && (x===y || (Math.min(x.length,y.length)>=3 && (x.includes(y) || y.includes(x)))); }
 function recBrowser(key, recs, opt){
-  const B = (S.br = S.br || {})[key] || (S.br[key] = {q:"", kind:"", who:"", photo:false, lim:30, open:{}});
+  const B = (S.br = S.br || {})[key] || (S.br[key] = {q:"", kind:"", who:"", photo:false, lim:30, open:{}, view:"date", shopOpen:{}});
+  if (!B.shopOpen) B.shopOpen = {};
   const names = [...new Set(recs.map(r=>r.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
   const box = h("div",{class:"stack",style:"gap:10px"});
   const list = h("div",{class:"stack",style:"gap:10px"});
@@ -2986,35 +3025,61 @@ function recBrowser(key, recs, opt){
     return rs.filter(r=>(!B.kind || r.kind===B.kind) && (!B.who || r.name===B.who) && (!B.photo || (r.photos||[]).length) && (!words.length || words.every(w=>recHay(r).includes(w))))
       .sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
   };
+  const rowEl = r => {
+    const open = !!B.open[r.id];
+    const sub = r.kind==="deal" ? [(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : ""), isNum(r.kg) ? num(r.kg,1).replace(/\.0$/,"")+"kg" : ""].filter(Boolean).join(" ") : (r.product||"");
+    const icons = [(r.photos||[]).length ? "📷"+r.photos.length : "", r.detail || r.quote ? "📎" : "", r.memo ? "📝" : ""].filter(Boolean).join(" ");
+    const head = B.view==="shop" ? [fmtDate(r.date||r.at).slice(5), r.name, sub] : [r.name, sub];
+    return h("div",{class:"e rrow"+(open?" open":"")},
+      h("button",{type:"button", class:"rsum", "aria-expanded":String(open), onclick:()=>{ if (open) delete B.open[r.id]; else B.open[r.id] = true; paint(); }},
+        h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind),
+        h("span",{class:"rmain"}, B.view==="shop" ? h("b",null, head.filter(Boolean).join("・")) : h("b",null, r.shop||"（店名なし）"), B.view==="shop" ? (r.memo ? h("span",{class:"small muted"}, String(r.memo).replace(/\s+/g," ").slice(0,40)) : null) : h("span",{class:"small muted"}, head.filter(Boolean).join("・"))),
+        icons ? h("span",{class:"ricons"}, icons) : null,
+        h("span",{class:"chev","aria-hidden":"true"}, open ? "▲" : "▼")),
+      open ? h("div",{class:"rbody"}, opt.detail(r)) : null);
+  };
+  const dayLabel = d => { try { const t = new Date(d+"T00:00:00"); return d.replace(/-/g,"/")+"（"+WEEK[t.getDay()]+"）"; } catch(e){ return d; } };
   const paint = () => {
-    const rs = filtered(), shown = rs.slice(0, B.lim), searching = !!normQ(B.q);
-    const groups = []; let cur = null;
-    for (const r of shown){ const d = String(r.date || r.at || "").slice(0,10); if (!cur || cur.d!==d){ cur = {d, rs:[]}; groups.push(cur); } cur.rs.push(r); }
-    const dayLabel = d => { try { const t = new Date(d+"T00:00:00"); return d.replace(/-/g,"/")+"（"+WEEK[t.getDay()]+"）"; } catch(e){ return d; } };
-    list.replaceChildren(...[
-      h("div",{class:"row",style:"gap:6px"}, h("b",null, rs.length+"件"), h("span",{class:"small muted"}, searching ? "（全期間から検索）" : (opt.scopeLabel||"")),
-        (B.q || B.kind || B.who || B.photo) ? h("button",{type:"button", class:"linkbtn small", style:"margin-left:auto", onclick:()=>{ Object.assign(B,{q:"",kind:"",who:"",photo:false,lim:30}); render(); }},"絞り込みを解除") : null),
-      groups.length ? groups.map(g=>h("div",{class:"dgroup"},
-        h("div",{class:"dhead"}, dayLabel(g.d), h("span",null, g.rs.length+"件")),
-        h("div",{class:"log"}, g.rs.map(r=>{
-          const open = !!B.open[r.id];
-          const sub = r.kind==="deal" ? [(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : ""), isNum(r.kg) ? num(r.kg,1).replace(/\.0$/,"")+"kg" : ""].filter(Boolean).join(" ") : (r.product||"");
-          const icons = [(r.photos||[]).length ? "📷"+r.photos.length : "", r.detail || r.quote ? "📎" : "", r.memo ? "📝" : ""].filter(Boolean).join(" ");
-          return h("div",{class:"e rrow"+(open?" open":"")},
-            h("button",{type:"button", class:"rsum", "aria-expanded":String(open), onclick:()=>{ if (open) delete B.open[r.id]; else B.open[r.id] = true; paint(); }},
-              h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind),
-              h("span",{class:"rmain"}, h("b",null, r.shop||"（店名なし）"), h("span",{class:"small muted"}, [r.name, sub].filter(Boolean).join("・"))),
-              icons ? h("span",{class:"ricons"}, icons) : null,
-              h("span",{class:"chev","aria-hidden":"true"}, open ? "▲" : "▼")),
-            open ? h("div",{class:"rbody"}, opt.detail(r)) : null);
-        }))))
-      : h("div",{class:"log"}, h("div",{class:"empty"}, searching || B.kind || B.who || B.photo ? "条件に合う記録はありません。" : (opt.empty||"記録はありません。"))),
-      rs.length > B.lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ B.lim += 30; paint(); }}, "もっと見る（残り"+(rs.length-B.lim)+"件）")) : null].flat(Infinity).filter(Boolean));
+    const rs = filtered(), searching = !!normQ(B.q), filt = B.q || B.kind || B.who || B.photo;
+    const top = h("div",{class:"row",style:"gap:6px"}, h("b",null, rs.length+"件"), h("span",{class:"small muted"}, searching ? "（全期間から検索）" : (opt.scopeLabel||"")),
+      filt ? h("button",{type:"button", class:"linkbtn small", style:"margin-left:auto", onclick:()=>{ Object.assign(B,{q:"",kind:"",who:"",photo:false,lim:30}); render(); }},"絞り込みを解除") : null);
+    const emptyEl = h("div",{class:"log"}, h("div",{class:"empty"}, filt ? "条件に合う記録はありません。" : (opt.empty||"記録はありません。")));
+    let body, more = null;
+    if (B.view==="shop"){
+      /* お店ごと：同じお店の記録を、誰が付けたかに関係なく1つにまとめる（新しい記録があるお店から） */
+      const m = new Map();
+      for (const r of rs){ const k = shopKey(r.shop) || "（店名なし）"; if (!m.has(k)) m.set(k, {name:r.shop||"（店名なし）", rs:[]}); m.get(k).rs.push(r); }
+      const shops = [...m.entries()].map(([k,v])=>({k, ...v}));
+      const shown = shops.slice(0, B.lim);
+      body = shown.length ? h("div",{class:"stack",style:"gap:8px"}, shown.map(g=>{
+        const open = !!B.shopOpen[g.k], last = g.rs[0], staff = [...new Set(g.rs.map(r=>r.name).filter(Boolean))];
+        const deals = g.rs.filter(r=>r.kind==="deal").length, phs = g.rs.reduce((a,r)=>a+((r.photos||[]).length),0);
+        return h("div",{class:"shopcard"+(open?" open":"")},
+          h("button",{type:"button", class:"shophead", "aria-expanded":String(open), onclick:()=>{ if (open) delete B.shopOpen[g.k]; else B.shopOpen[g.k] = true; paint(); }},
+            h("span",{class:"rmain"}, h("b",{style:"font-size:16px"}, g.name),
+              h("span",{class:"small muted"}, "最終 "+fmtDate(last.date||last.at)+"（"+(REC_LABEL[last.kind]||last.kind)+"・"+(last.name||"")+"）")),
+            h("span",{class:"shopstat"}, h("b",null, g.rs.length+"件"), h("span",null, staff.length+"人"+(deals ? "・成約"+deals : "")+(phs ? "・📷"+phs : ""))),
+            h("span",{class:"chev","aria-hidden":"true"}, open ? "▲" : "▼")),
+          open ? h("div",{class:"shopbody"},
+            h("div",{class:"small muted"}, "担当した社員："+staff.join("、")),
+            opt.shopExtra ? opt.shopExtra(g) : null,
+            h("div",{class:"log"}, g.rs.map(rowEl))) : null);
+      })) : emptyEl;
+      if (shops.length > B.lim) more = h("div",null, h("button",{class:"btn sm", onclick:()=>{ B.lim += 30; paint(); }}, "もっと見る（残り"+(shops.length-B.lim)+"店）"));
+      top.firstChild.textContent = shops.length+"店・"+rs.length+"件";
+    } else {
+      const shown = rs.slice(0, B.lim), groups = []; let cur = null;
+      for (const r of shown){ const d = String(r.date || r.at || "").slice(0,10); if (!cur || cur.d!==d){ cur = {d, rs:[]}; groups.push(cur); } cur.rs.push(r); }
+      body = groups.length ? groups.map(g=>h("div",{class:"dgroup"}, h("div",{class:"dhead"}, dayLabel(g.d), h("span",null, g.rs.length+"件")), h("div",{class:"log"}, g.rs.map(rowEl)))) : emptyEl;
+      if (rs.length > B.lim) more = h("div",null, h("button",{class:"btn sm", onclick:()=>{ B.lim += 30; paint(); }}, "もっと見る（残り"+(rs.length-B.lim)+"件）"));
+    }
+    list.replaceChildren(...[top, body, more].flat(Infinity).filter(Boolean));
   };
   let tm = null;
   const kinds = [["","すべて"], ...REC_KINDS.map(([k,l])=>[k, k==="sample" ? "サンプル" : l])];
   box.append(
     h("div",{class:"rfilter"},
+      h("div",{class:"seg2", role:"tablist"}, [["date","日付順"],["shop","お店ごと"]].map(([v,l])=>h("button",{type:"button", role:"tab", "aria-selected":String(B.view===v), onclick:e=>{ B.view = v; B.lim = 30; e.currentTarget.parentNode.querySelectorAll("button").forEach(b=>b.setAttribute("aria-selected", String(b===e.currentTarget))); paint(); }}, l))),
       h("input",{class:"i", type:"search", id:"br-q-"+key, enterkeyhint:"search", placeholder:"店名・メモ・商品・社員名で検索", value:B.q,
         oninput:e=>{ B.q = e.target.value; B.lim = 30; clearTimeout(tm); tm = setTimeout(paint, 200); }}),
       h("div",{class:"row",style:"gap:8px;flex-wrap:nowrap"},
@@ -3027,19 +3092,43 @@ function recBrowser(key, recs, opt){
   return box;
 }
 function resList(){
-  const X = resState(), gp = X.gpDoc?.map || {};
+  const X = resState();
   const per = {month:"今月", last:"先月", year:"今年", all:"全期間"}[X.period||"month"] || "";
   return h("section",{class:"sec"}, h("h2",null,"記録の一覧"),
     h("p",{class:"small muted",style:"margin:0"},"記録を押すと、メモ・添付した結果・写真が開きます。間違いやテストの記録は、開いて「削除」を押してください（社員の「みんなの記録」・集計からも消え、元に戻せません）。"),
     recBrowser("res", resValid(), {
       scope: resPeriod, scopeLabel: "（"+per+"）", empty: "この期間の記録はありません。",
-      detail: r => h("div",{class:"stack",style:"gap:8px"},
-        r.kind==="deal" ? h("div",{class:"small"}, (r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(r.newDeal===false?"（既存）":"（新規）")+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "")) : null,
-        h("div",{class:"small muted"}, fmtDate(r.date||r.at)+"　"+(r.name||"")),
-        r.kind==="quote" && r.quote ? qtSnapView(r) : null,
-        recExtras(r, ""),
-        h("div",{class:"row"}, h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))))
+      detail: resDetail, shopExtra: g => karteLink(g.name)
     }));
+}
+/* 顧客カルテの中に、このお店の営業記録（社員全員の分）を出す。社長の画面だけ（記録はGoogle Driveとアプリ内から読む） */
+function karteRecSection(c){
+  if (!S.isOwner || S.guest || STANDALONE) return null;
+  const X = resState();
+  if (!X.loaded && !X.loading) setTimeout(resLoad, 0);
+  const rs = X.loaded ? resValid().filter(r=>sameShop(r.shop, c.name)) : [];
+  const staff = [...new Set(rs.map(r=>r.name).filter(Boolean))];
+  return h("section",{class:"sec"}, h("h2",null,"営業記録", h("span",{class:"c"}, X.loaded ? rs.length+"件"+(staff.length ? "（"+staff.join("、")+"）" : "") : "読み込み中…")),
+    h("p",{class:"small muted",style:"margin:0"},"社員が営業記録アプリで付けた、このお店の記録です（店名が同じ・ほぼ同じものをまとめています）。"),
+    X.loaded ? (rs.length ? recBrowser("karte-"+c.id, rs, {empty:"このお店の記録はまだありません。", detail:resDetail}) : h("div",{class:"log"}, h("div",{class:"empty"},"このお店の記録はまだありません。")))
+      : h("div",{class:"log"}, h("div",{class:"empty"},"読み込んでいます…")));
+}
+/* 記録のお店に合う顧客カルテ（店名のゆれは吸収）。あれば開くボタン、なければ登録ボタン */
+function karteFor(name){ return (S.customers||[]).find(c=>sameShop(c.name, name)); }
+function karteLink(name){
+  if (!can("custView") || !name) return null;
+  const c = karteFor(name);
+  if (c) return h("div",null, h("button",{class:"btn sm", onclick:()=>{ S.custId = c.id; S.custNew = false; S.custDraft = null; go("customers"); }},"📋 顧客カルテを開く"));
+  return can("custEdit") ? h("div",null, h("button",{class:"btn sm ghost", onclick:()=>{ S.custNew = true; S.custId = null; S.custDraft = {...blankCustomer(), name}; go("customers"); }},"＋ 顧客カルテに登録")) : null;
+}
+function resDetail(r){
+  const gp = resState().gpDoc?.map || {};
+  return h("div",{class:"stack",style:"gap:8px"},
+    r.kind==="deal" ? h("div",{class:"small"}, (r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(r.newDeal===false?"（既存）":"（新規）")+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "")) : null,
+    h("div",{class:"small muted"}, fmtDate(r.date||r.at)+"　"+(r.name||"")),
+    r.kind==="quote" && r.quote ? qtSnapView(r) : null,
+    recExtras(r, ""),
+    h("div",{class:"row"}, karteLink(r.shop), h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))));
 }
 function resPeriod(r){
   const X = resState(), d = String(r.date || r.at || "").slice(0,10), now = new Date();
