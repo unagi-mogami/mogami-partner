@@ -142,6 +142,18 @@ textarea.i.grow{min-height:120px;resize:none;overflow:hidden;line-height:1.7}
 .pgrid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--sunk);cursor:zoom-in}
 .pgrid figcaption{font-size:11px;color:var(--muted);text-align:center}
 .rx{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.rfilter{display:flex;flex-direction:column;gap:8px;position:sticky;top:calc(52px + env(safe-area-inset-top,0px));z-index:5;background:var(--paper);padding:8px 0}
+.dgroup{display:flex;flex-direction:column;gap:6px}
+.dhead{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--muted);padding:0 2px}
+.rrow{padding:0!important}
+.rsum{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;min-height:56px}
+.rsum:focus-visible{outline:3px solid var(--green-mid);outline-offset:-3px}
+.rmain{display:flex;flex-direction:column;min-width:0;flex:1}
+.rmain b,.rmain span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ricons{font-size:12px;color:var(--muted);white-space:nowrap}
+.chev{font-size:10px;color:var(--muted)}
+.rrow.open{background:var(--sunk)}
+.rbody{padding:0 14px 14px}
 input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 
 /* 診断 */
@@ -2698,8 +2710,6 @@ async function recAllLoad(code){
 function recAllView(R, me){
   if (!STANDALONE || !REC_PHOTO_URL) return null;
   const A = recAllState(), code = me.code;
-  const names = [...new Set(A.list.map(x=>x.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
-  const rows = A.list.filter(x=>!A.who || x.name===A.who);
   const saveCode = async () => {
     if (!normCode(R.pcode)) return toast("社員コードを入れてください");
     if (!(await staffCodeOk(R.pcode))) return toast("社員コードが違います。社長から届いたLINEを確認してください");
@@ -2713,14 +2723,15 @@ function recAllView(R, me){
     : !A.loaded ? h("div",null, h("button",{class:"btn", disabled:A.busy, onclick:()=>recAllLoad(code)}, A.busy ? "読み込んでいます…" : "みんなの記録を見る"),
         A.err ? h("div",{class:"banner warn",style:"margin-top:8px"}, h("div",null,A.err)) : null)
     : h("div",{class:"stack",style:"gap:10px"},
-        h("div",{class:"row"}, h("span",{class:"small muted",style:"flex:1"}, rows.length+"件"), h("button",{class:"btn sm", disabled:A.busy, onclick:()=>recAllLoad(code)}, A.busy ? "読み込み中…" : "最新にする")),
+        h("div",{class:"row"}, h("span",{class:"small muted",style:"flex:1"}, "社員全員の記録です。記録を押すと中身と写真が開きます。"), h("button",{class:"btn sm", disabled:A.busy, onclick:()=>recAllLoad(code)}, A.busy ? "読み込み中…" : "最新にする")),
         A.err ? h("div",{class:"banner warn"}, h("div",null,A.err)) : null,
-        names.length > 1 ? h("div",{class:"chip-row"}, [["","全員"], ...names.map(n=>[n,n])].map(([v,l])=>h("button",{type:"button","aria-pressed":String(A.who===v), onclick:()=>{ A.who = v; A.lim = 15; render(); }}, l))) : null,
-        h("div",{class:"log"}, rows.length ? rows.slice(0,A.lim).map(x=>h("div",{class:"e"},
-          h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",null,x.name), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind)),
-          h("div",null, h("b",null,x.shop||"（店名なし）"), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg" : (x.product ? "　"+x.product : "")),
-          recExtras(x, code))) : h("div",{class:"empty"},"まだ記録はありません。")),
-        rows.length > A.lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ A.lim += 20; render(); }},"もっと見る（残り"+(rows.length-A.lim)+"件）")) : null));
+        recBrowser("all", A.list, {
+          empty: "まだ記録はありません。",
+          detail: x => h("div",{class:"stack",style:"gap:8px"},
+            x.kind==="deal" ? h("div",{class:"small"}, (x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg") : null,
+            h("div",{class:"small muted"}, fmtDate(x.date||x.at)+"　"+(x.name||"")),
+            recExtras(x, code))
+        })));
 }
 function recordView(){
   const me = recMe();
@@ -2956,24 +2967,79 @@ async function resSendDeletes(){
     if (n){ const d = {ids:{...(doc.ids||{})}, sent}; try { await S.db.collection("data/users/"+S.uid).doc("rec_excl").set(d); X.exclDoc = d; } catch(e){} }
   } finally { resDelBusy = false; }
 }
+/* ============ 記録の一覧（検索・絞り込み・日付ごと）：社長の実績と、社員の「みんなの記録」で共通 ============ */
+/* 一覧は1行ずつの短い表示にして、押した記録だけ中身（メモ・添付・写真）を開く。
+   検索の入力中は画面全体を作り直さず、一覧の部分だけを書き換える（入力欄から指が離れないように） */
+const WEEK = ["日","月","火","水","木","金","土"];
+function recHay(r){
+  return normQ([r.shop, r.name, r.memo, r.product, r.size, r.qty, r.react, r.detail, r.detailLabel, REC_LABEL[r.kind], r.quote?.no, (r.photos||[]).map(p=>p && p.type).join(" ")].filter(Boolean).join(" "));
+}
+function recBrowser(key, recs, opt){
+  const B = (S.br = S.br || {})[key] || (S.br[key] = {q:"", kind:"", who:"", photo:false, lim:30, open:{}});
+  const names = [...new Set(recs.map(r=>r.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const box = h("div",{class:"stack",style:"gap:10px"});
+  const list = h("div",{class:"stack",style:"gap:10px"});
+  const filtered = () => {
+    const words = normQ(B.q).split(" ").filter(Boolean);
+    let rs = recs;
+    if (!words.length && opt.scope) rs = rs.filter(opt.scope);
+    return rs.filter(r=>(!B.kind || r.kind===B.kind) && (!B.who || r.name===B.who) && (!B.photo || (r.photos||[]).length) && (!words.length || words.every(w=>recHay(r).includes(w))))
+      .sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+  };
+  const paint = () => {
+    const rs = filtered(), shown = rs.slice(0, B.lim), searching = !!normQ(B.q);
+    const groups = []; let cur = null;
+    for (const r of shown){ const d = String(r.date || r.at || "").slice(0,10); if (!cur || cur.d!==d){ cur = {d, rs:[]}; groups.push(cur); } cur.rs.push(r); }
+    const dayLabel = d => { try { const t = new Date(d+"T00:00:00"); return d.replace(/-/g,"/")+"（"+WEEK[t.getDay()]+"）"; } catch(e){ return d; } };
+    list.replaceChildren(...[
+      h("div",{class:"row",style:"gap:6px"}, h("b",null, rs.length+"件"), h("span",{class:"small muted"}, searching ? "（全期間から検索）" : (opt.scopeLabel||"")),
+        (B.q || B.kind || B.who || B.photo) ? h("button",{type:"button", class:"linkbtn small", style:"margin-left:auto", onclick:()=>{ Object.assign(B,{q:"",kind:"",who:"",photo:false,lim:30}); render(); }},"絞り込みを解除") : null),
+      groups.length ? groups.map(g=>h("div",{class:"dgroup"},
+        h("div",{class:"dhead"}, dayLabel(g.d), h("span",null, g.rs.length+"件")),
+        h("div",{class:"log"}, g.rs.map(r=>{
+          const open = !!B.open[r.id];
+          const sub = r.kind==="deal" ? [(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : ""), isNum(r.kg) ? num(r.kg,1).replace(/\.0$/,"")+"kg" : ""].filter(Boolean).join(" ") : (r.product||"");
+          const icons = [(r.photos||[]).length ? "📷"+r.photos.length : "", r.detail || r.quote ? "📎" : "", r.memo ? "📝" : ""].filter(Boolean).join(" ");
+          return h("div",{class:"e rrow"+(open?" open":"")},
+            h("button",{type:"button", class:"rsum", "aria-expanded":String(open), onclick:()=>{ if (open) delete B.open[r.id]; else B.open[r.id] = true; paint(); }},
+              h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind),
+              h("span",{class:"rmain"}, h("b",null, r.shop||"（店名なし）"), h("span",{class:"small muted"}, [r.name, sub].filter(Boolean).join("・"))),
+              icons ? h("span",{class:"ricons"}, icons) : null,
+              h("span",{class:"chev","aria-hidden":"true"}, open ? "▲" : "▼")),
+            open ? h("div",{class:"rbody"}, opt.detail(r)) : null);
+        }))))
+      : h("div",{class:"log"}, h("div",{class:"empty"}, searching || B.kind || B.who || B.photo ? "条件に合う記録はありません。" : (opt.empty||"記録はありません。"))),
+      rs.length > B.lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ B.lim += 30; paint(); }}, "もっと見る（残り"+(rs.length-B.lim)+"件）")) : null].flat(Infinity).filter(Boolean));
+  };
+  let tm = null;
+  const kinds = [["","すべて"], ...REC_KINDS.map(([k,l])=>[k, k==="sample" ? "サンプル" : l])];
+  box.append(
+    h("div",{class:"rfilter"},
+      h("input",{class:"i", type:"search", id:"br-q-"+key, enterkeyhint:"search", placeholder:"店名・メモ・商品・社員名で検索", value:B.q,
+        oninput:e=>{ B.q = e.target.value; B.lim = 30; clearTimeout(tm); tm = setTimeout(paint, 200); }}),
+      h("div",{class:"row",style:"gap:8px;flex-wrap:nowrap"},
+        names.length > 1 ? h("select",{class:"i", style:"flex:1;min-width:0", "aria-label":"社員で絞り込む", onchange:e=>{ B.who = e.target.value; B.lim = 30; paint(); }},
+          [["","社員：全員"], ...names.map(n=>[n,n])].map(([v,l])=>h("option",{value:v, selected:B.who===v}, l))) : null,
+        h("button",{type:"button", class:"btn sm"+(B.photo?" primary":""), style:"white-space:nowrap", "aria-pressed":String(B.photo), onclick:e=>{ B.photo = !B.photo; B.lim = 30; e.currentTarget.classList.toggle("primary", B.photo); e.currentTarget.setAttribute("aria-pressed", String(B.photo)); paint(); }}, "📷 写真あり")),
+      h("div",{class:"chip-row",style:"margin:0"}, kinds.map(([v,l])=>h("button",{type:"button","aria-pressed":String(B.kind===v), onclick:e=>{ B.kind = v; B.lim = 30; e.currentTarget.parentNode.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", String(b===e.currentTarget))); paint(); }}, l)))),
+    list);
+  paint();
+  return box;
+}
 function resList(){
-  const X = resState(), ex = X.exclDoc?.ids || {};
-  const who = X.listWho || "";
-  const all = resValid().filter(resPeriod).filter(r=>!who || r.name===who).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
-  const names = [...new Set(resValid().filter(resPeriod).map(r=>r.name))].sort((a,b)=>a.localeCompare(b,"ja"));
-  const lim = X.listLim || 10, gp = X.gpDoc?.map || {};
-  return h("section",{class:"sec"}, h("h2",null,"記録の一覧", h("span",{class:"c"}, all.length+"件（この期間）")),
-    h("p",{class:"small muted",style:"margin:0"},"間違いやテストの記録は「削除」を押してください。社長の画面・社員の「みんなの記録」・集計から消え、写真も削除されます（元に戻せません）。"),
-    names.length > 1 ? h("div",{class:"chip-row"}, [["","全員"], ...names.map(n=>[n,n])].map(([v,l])=>h("button",{type:"button","aria-pressed":String(who===v), onclick:()=>{ X.listWho = v; X.listLim = 10; render(); }}, l))) : null,
-    h("div",{class:"log"}, all.length ? all.slice(0,lim).map(r=>{ const off = !!ex[r.id];
-      return h("div",{class:"e", style: off ? "opacity:.55" : null},
-        h("div",{class:"m"}, h("span",null,fmtDate(r.date||r.at)), h("span",null,r.name), h("span",{class:"pill "+(r.kind==="deal"?"ok":"line")}, REC_LABEL[r.kind]||r.kind), 
-          h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))),
-        h("div",null, h("b",null,r.shop||"（店名なし）"),
-          r.kind==="deal" ? "　"+(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "") : (r.product ? "　"+r.product : ""),
-          r.kind==="quote" && r.quote ? qtSnapView(r) : null, recExtras(r, ""))); })
-      : h("div",{class:"empty"},"この期間の記録はありません。")),
-    all.length > lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ X.listLim = lim + 20; render(); }}, "もっと見る（残り"+(all.length-lim)+"件）")) : null);
+  const X = resState(), gp = X.gpDoc?.map || {};
+  const per = {month:"今月", last:"先月", year:"今年", all:"全期間"}[X.period||"month"] || "";
+  return h("section",{class:"sec"}, h("h2",null,"記録の一覧"),
+    h("p",{class:"small muted",style:"margin:0"},"記録を押すと、メモ・添付した結果・写真が開きます。間違いやテストの記録は、開いて「削除」を押してください（社員の「みんなの記録」・集計からも消え、元に戻せません）。"),
+    recBrowser("res", resValid(), {
+      scope: resPeriod, scopeLabel: "（"+per+"）", empty: "この期間の記録はありません。",
+      detail: r => h("div",{class:"stack",style:"gap:8px"},
+        r.kind==="deal" ? h("div",{class:"small"}, (r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(r.newDeal===false?"（既存）":"（新規）")+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "")) : null,
+        h("div",{class:"small muted"}, fmtDate(r.date||r.at)+"　"+(r.name||"")),
+        r.kind==="quote" && r.quote ? qtSnapView(r) : null,
+        recExtras(r, ""),
+        h("div",{class:"row"}, h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))))
+    }));
 }
 function resPeriod(r){
   const X = resState(), d = String(r.date || r.at || "").slice(0,10), now = new Date();
