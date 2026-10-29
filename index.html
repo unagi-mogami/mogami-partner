@@ -136,6 +136,12 @@ textarea.i.grow{min-height:120px;resize:none;overflow:hidden;line-height:1.7}
 .ph .types.need button{border-color:var(--amber)}
 .addph{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;border:2px dashed var(--line);border-radius:10px;font-weight:700;color:var(--ink-2);cursor:pointer;background:var(--surface)}
 .addph input{position:absolute;width:1px;height:1px;opacity:0}
+.attach{border:1px solid var(--green-mid);background:var(--green-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:6px}
+.pgrid figure{margin:0;display:flex;flex-direction:column;gap:2px}
+.pgrid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--sunk);cursor:zoom-in}
+.pgrid figcaption{font-size:11px;color:var(--muted);text-align:center}
+.rx{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--green-mid)}
 
 /* 診断 */
@@ -2481,8 +2487,9 @@ function staffCodePanel(){
       : h("div",null, h("button",{class:"btn", disabled:st.busy, onclick:show}, st.busy ? "確認しています…" : "社員コードを表示する")),
     st.err ? h("div",{class:"banner warn"}, h("div",null, st.err)) : null);
 }
-const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", photos:[], pcode:"", reg:{name:"", pin:"", code:""}, busy:false});
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", photos:[], pcode:"", detailLabel:"", reg:{name:"", pin:"", code:""}, busy:false});
 const MEMO_MAX = 1000;
+const REC_DETAIL_MAX = 1500;
 const MEMO_PH = "話した内容：\n困っていること：\n次にやること：";
 /* メモ欄：書くほど広がる。キーボードのマイクで話して入れる前提 */
 function growBox(el){ try { el.style.height = "auto"; el.style.height = Math.max(120, el.scrollHeight+2)+"px"; } catch(e){} }
@@ -2523,8 +2530,10 @@ async function recAdd(fields){
 }
 function recFromScreen(sendText){
   const R = recState();
-  R.kind = S.route==="diagnose" ? "diag" : "quote";
-  R.detail = String(sendText||"").slice(0,400);
+  /* 診断は「診断」で記録。原価計算・シミュレーターは結果を添付して、記録の種類（訪問・見積など）は社員が選ぶ */
+  if (S.route==="diagnose") R.kind = "diag";
+  R.detailLabel = S.route==="diagnose" ? "診断結果" : ((S.simTab||"ju")==="cmp" ? "シミュレーターの結果" : "原価計算の結果");
+  R.detail = String(sendText||"").slice(0,REC_DETAIL_MAX);
   if (!R.shop) R.shop = (S.diag.shop?.name||"").trim();
   go("record");
 }
@@ -2621,6 +2630,98 @@ function photoBlock(R, me){
     R.photos.length ? h("span",{class:"small muted",style:"font-weight:400"},"写真ごとに種類を1つ押してください。") : null,
     R.photos.length && STANDALONE && !me.code ? field("社員コード（写真を送るときに一度だけ）", h("input",{class:"i", id:"rec-pcode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードです。次からは入力不要です。") : null);
 }
+/* ============ 記録の中身（メモ・添付した結果・写真）を見る：社長の実績と、社員の「みんなの記録」で共通 ============ */
+/* 写真の読み方：独立版は受付係（Apps Script）から社員コードつきで受け取る。社長版はGoogle Driveの接続で読む。
+   アプリ内に保存した写真（asset）はそのまま表示する。読んだ写真はこの画面のあいだだけ覚えておく */
+const photoCache = {};
+async function photoFetch(p, code){
+  const key = p.asset ? "a:"+p.asset : "d:"+p.id;
+  if (photoCache[key]) return photoCache[key];
+  let src = null;
+  if (p.asset) src = "/_blob/"+p.asset;
+  else if (STANDALONE){
+    const r = await fetch(REC_PHOTO_URL, {method:"POST", body:JSON.stringify({action:"photo", code, id:p.id}), headers:{"Content-Type":"text/plain;charset=utf-8"}});
+    const j = await r.json(); if (!j || !j.ok) throw new Error((j && j.err) || "ng");
+    src = "data:"+(j.type||"image/jpeg")+";base64,"+j.data;
+  } else {
+    const mcp = await claude.use("mcp"); if (!mcp) throw new Error("nomcp");
+    const r = await mcp.callTool(REC_DRIVE, "download_file_content", {fileId:p.id});
+    const c = r?.payload?.content ?? r?.structuredContent?.content;
+    if (!c) throw new Error("empty");
+    src = "data:"+(r?.payload?.mimeType || r?.structuredContent?.mimeType || "image/jpeg")+";base64,"+String(c).replace(/\s/g,"");
+  }
+  photoCache[key] = src; return src;
+}
+function recPhotos(r, code){
+  const ps = (r.photos||[]).filter(p=>p && (p.id || p.asset));
+  if (!ps.length) return null;
+  const st = (S.recPh = S.recPh || {})[r.id] || {};
+  const load = async () => {
+    S.recPh[r.id] = {busy:true}; render();
+    const out = []; let bad = 0;
+    for (const p of ps){ try { out.push({src: await photoFetch(p, code), type:p.type}); } catch(e){ bad++; } }
+    S.recPh[r.id] = {list:out, bad}; render();
+  };
+  if (!st.list) return h("div",null, h("button",{type:"button", class:"btn sm", disabled:!!st.busy, onclick:load}, st.busy ? "写真を読み込んでいます…" : "📷 写真を見る（"+ps.length+"枚）"));
+  return h("div",null,
+    st.list.length ? h("div",{class:"pgrid"}, st.list.map(x=>h("figure",null, h("img",{src:x.src, alt:(r.shop||"")+" "+(x.type||"写真"), onclick:()=>showPhoto(x.src, (r.shop||"")+"　"+(x.type||""))}), h("figcaption",null, x.type||"写真")))) : null,
+    st.bad ? h("p",{class:"small",style:"margin:4px 0 0;color:var(--amber)"}, st.bad+"枚の写真を読み込めませんでした。") : null);
+}
+function recExtras(r, code){
+  const bits = [];
+  if (r.qty || r.react) bits.push(h("div",{class:"small"}, [r.qty ? "量："+r.qty : "", r.react ? "反応："+r.react : ""].filter(Boolean).join("　")));
+  if (r.memo) bits.push(h("div",{class:"small",style:"white-space:pre-wrap;color:var(--ink-2)"}, r.memo));
+  if (r.detail) bits.push(h("details",{class:"x"}, h("summary",null,"📎 "+(r.detailLabel || (r.kind==="diag" ? "診断結果" : r.kind==="quote" ? "見積の内容" : "添付した結果"))), h("div",{class:"formula",style:"white-space:pre-wrap"}, r.detail)));
+  const ph = recPhotos(r, code); if (ph) bits.push(ph);
+  return bits.length ? h("div",{class:"rx"}, bits) : null;
+}
+/* ============ みんなの記録（独立版の社員どうしで見る） ============ */
+/* 受付係（Apps Script）が社長のスプレッドシートを読み、暗証番号などを外して返す。社員コードが合う時だけ */
+function recAllState(){ return S.recAll || (S.recAll = {loaded:false, busy:false, err:"", list:[], who:"", lim:15}); }
+async function recAllLoad(code){
+  const A = recAllState(); if (A.busy) return; A.busy = true; A.err = ""; render();
+  try {
+    const r = await fetch(REC_PHOTO_URL, {method:"POST", body:JSON.stringify({action:"list", code}), headers:{"Content-Type":"text/plain;charset=utf-8"}});
+    const j = await r.json();
+    if (!j || !j.ok) throw Object.assign(new Error("ng"), {code: j && j.err});
+    const all = Array.isArray(j.recs) ? j.recs : [];
+    const cancelled = new Set(all.filter(x=>x.kind==="cancel").map(x=>x.name+"|"+x.ref));
+    A.list = all.filter(x=>x && x.id && x.kind!=="cancel" && !cancelled.has(x.name+"|"+x.id)).sort((a,b)=>String(b.at||"").localeCompare(String(a.at||"")));
+    A.loaded = true;
+  } catch(e){
+    A.err = e && e.code==="code" ? "社員コードが合いません。社長に確認してください。"
+      : e && (e.code==="old" || e.code==="type") ? "受付係（Apps Script）が古い版です。社長に更新を頼んでください。"
+      : "記録を読み込めませんでした。電波の良い所でもう一度押してください。";
+  }
+  A.busy = false; render();
+}
+function recAllView(R, me){
+  if (!STANDALONE || !REC_PHOTO_URL) return null;
+  const A = recAllState(), code = me.code;
+  const names = [...new Set(A.list.map(x=>x.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const rows = A.list.filter(x=>!A.who || x.name===A.who);
+  const saveCode = async () => {
+    if (!normCode(R.pcode)) return toast("社員コードを入れてください");
+    if (!(await staffCodeOk(R.pcode))) return toast("社員コードが違います。社長から届いたLINEを確認してください");
+    const m = lsGet(REC_ME_KEY, null); if (m){ m.code = normCode(R.pcode); lsSet(REC_ME_KEY, m); }
+    R.pcode = ""; render();
+  };
+  return h("section",{class:"sec"}, h("h2",null,"みんなの記録", h("span",{class:"c"},"社員全員の記録と写真")),
+    !code ? h("div",{class:"panel stack"},
+        field("社員コード（一度だけ）", h("input",{class:"i", id:"rec-acode", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(R,"pcode")}), "社長からLINEで届いた社員コードを入れると、みんなの記録が見られます。"),
+        h("div",null, h("button",{class:"btn sm primary", onclick:saveCode},"コードを登録する")))
+    : !A.loaded ? h("div",null, h("button",{class:"btn", disabled:A.busy, onclick:()=>recAllLoad(code)}, A.busy ? "読み込んでいます…" : "みんなの記録を見る"),
+        A.err ? h("div",{class:"banner warn",style:"margin-top:8px"}, h("div",null,A.err)) : null)
+    : h("div",{class:"stack",style:"gap:10px"},
+        h("div",{class:"row"}, h("span",{class:"small muted",style:"flex:1"}, rows.length+"件"), h("button",{class:"btn sm", disabled:A.busy, onclick:()=>recAllLoad(code)}, A.busy ? "読み込み中…" : "最新にする")),
+        A.err ? h("div",{class:"banner warn"}, h("div",null,A.err)) : null,
+        names.length > 1 ? h("div",{class:"chip-row"}, [["","全員"], ...names.map(n=>[n,n])].map(([v,l])=>h("button",{type:"button","aria-pressed":String(A.who===v), onclick:()=>{ A.who = v; A.lim = 15; render(); }}, l))) : null,
+        h("div",{class:"log"}, rows.length ? rows.slice(0,A.lim).map(x=>h("div",{class:"e"},
+          h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",null,x.name), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind)),
+          h("div",null, h("b",null,x.shop||"（店名なし）"), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg" : (x.product ? "　"+x.product : "")),
+          recExtras(x, code))) : h("div",{class:"empty"},"まだ記録はありません。")),
+        rows.length > A.lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ A.lim += 20; render(); }},"もっと見る（残り"+(rows.length-A.lim)+"件）")) : null));
+}
 function recordView(){
   const me = recMe();
   if (!me) return recRegisterView();
@@ -2634,7 +2735,7 @@ function recordView(){
     if (!R.kind) return toast("記録する内容を選んでください");
     if (!R.shop.trim()) return toast("お店の名前を入れてください");
     const f = {kind:R.kind, shop:R.shop.trim().replace(/\s+/g," "), memo:R.memo.trim()};
-    if (R.detail && (R.kind==="diag" || R.kind==="quote")) f.detail = R.detail;
+    if (R.detail){ f.detail = String(R.detail).slice(0,REC_DETAIL_MAX); if (R.detailLabel) f.detailLabel = R.detailLabel; }
     if (R.kind==="sample"){
       if (R.product) f.product = R.product;
       if (String(R.qty||"").trim()) f.qty = String(R.qty).trim().slice(0,30);
@@ -2672,7 +2773,7 @@ function recordView(){
     R.busy = true; render();
     const rec = await recAdd(f);
     R.busy = false;
-    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[]}); }
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を記録しました"); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); }
     render();
   };
   const undo = async x => { if (await recAdd({kind:"cancel", ref:x.id, shop:x.shop})){ toast("取り消しました"); render(); } };
@@ -2698,7 +2799,9 @@ function recordView(){
         field("1回の数量（kg）", h("input",{class:"i", id:"rec-kg", type:"number", inputmode:"decimal", min:0, placeholder:"例：10", ...bind(R,"kg","num")})),
         field("販売単価（円/kg・税抜）", h("input",{class:"i", id:"rec-price", type:"number", inputmode:"numeric", min:0, placeholder:"例：4300", ...bind(R,"price","num")})),
         field("新規・既存", sel(R,"newDeal",[["新規","新規のお店（初めての取引）"],["既存","既存のお店（新しい商品の採用）"]]))) : null,
-      (R.kind==="diag" || R.kind==="quote") && R.detail ? h("details",{class:"x"}, h("summary",null,"記録する内容（画面から取り込み済み）"), h("div",{class:"formula",style:"white-space:pre-wrap"}, R.detail)) : null,
+      R.detail ? h("div",{class:"attach"}, h("div",{class:"row",style:"justify-content:space-between"}, h("b",null,"📎 "+(R.detailLabel||"画面の結果")+"を添付します"),
+        h("button",{type:"button", class:"linkbtn small", onclick:()=>{ R.detail = ""; R.detailLabel = ""; render(); }},"添付を外す")),
+        h("details",{class:"x"}, h("summary",null,"中身を見る"), h("div",{class:"formula",style:"white-space:pre-wrap"}, R.detail))) : h("p",{class:"small muted",style:"margin:0"},"診断・原価計算・シミュレーターの画面で「営業記録に残す」を押すと、その結果を記録に付けられます。"),
       field("メモ（任意）", memoBox(R), "キーボードのマイクを押して話すと、そのまま文字になります。"),
       photoOn() ? photoBlock(R, me) : null,
       h("div",null, h("button",{class:"btn primary", disabled:R.busy, onclick:send}, R.busy==="photo" ? "写真を送っています…" : R.busy ? "送っています…" : "記録する"))),
@@ -2706,7 +2809,8 @@ function recordView(){
       h("div",{class:"log"}, log.length ? log.slice(0,30).map(x=>h("div",{class:"e"},
         h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null,
           x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
-        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : "")+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : "")+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : "")+(x.detail ? "　📎"+(x.detailLabel||"結果") : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+    recAllView(R, me),
     STANDALONE || S.guest ? h("details",{class:"x"}, h("summary",null,"名前・暗証番号を変える"),
       h("div",{class:"panel stack"}, h("p",{class:"small",style:"margin:0"},"登録を消して、もう一度登録します。送った記録は消えません。"),
         h("div",null, h("button",{class:"btn danger sm", onclick:()=>{ try { localStorage.removeItem(REC_ME_KEY); } catch(e){} render(); }},"登録をやり直す")))) : null);
@@ -2837,7 +2941,7 @@ function resList(){
           h("button",{class:"btn sm "+(off ? "" : "ghost danger"), style:"margin-left:auto;min-height:32px", onclick:()=>resToggleExcl(r.id)}, off ? "元に戻す" : "集計から外す")),
         h("div",null, h("b",null,r.shop||"（店名なし）"),
           r.kind==="deal" ? "　"+(r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "") : (r.product ? "　"+r.product : ""),
-          r.memo ? h("div",{class:"small muted"}, r.memo) : null, r.kind==="quote" && r.quote ? qtSnapView(r) : null)); })
+          r.kind==="quote" && r.quote ? qtSnapView(r) : null, recExtras(r, ""))); })
       : h("div",{class:"empty"},"この期間の記録はありません。")),
     all.length > lim ? h("div",null, h("button",{class:"btn sm", onclick:()=>{ X.listLim = lim + 20; render(); }}, "もっと見る（残り"+(all.length-lim)+"件）")) : null);
 }
