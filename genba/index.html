@@ -398,17 +398,33 @@ document.addEventListener("pointerup", lpCancel); document.addEventListener("poi
 window.addEventListener("scroll", () => { lpCancel(); }, { passive: true });
 document.addEventListener("contextmenu", e => { const it = e.target.closest("[data-react]"); if (it) { e.preventDefault(); lpCancel(); openReact(it.dataset.react, it.dataset.pal, it); } });
 
-/* ---------- アプリを開いている時の音 ---------- */
-let actx = null;
-function unlockAudio() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch(e) {} }
-document.addEventListener("touchstart", unlockAudio, { passive: true }); document.addEventListener("click", unlockAudio);
+/* ---------- アプリを開いている時の音 ----------
+   iPhoneはマナーモードだとWeb Audioが鳴らないため、音のデータ（WAV）を作って <audio> で鳴らす */
+const tones = {};
+function wav(notes, step, vol) {
+  const sr = 22050, len = Math.ceil(sr * step * (notes.length + 1)), d = new Int16Array(len);
+  notes.forEach((f, i) => { const st = Math.floor(i * step * sr), n = Math.floor(step * 1.4 * sr);
+    for (let k = 0; k < n && st + k < len; k++) { const t = k / sr, env = Math.min(1, k / (sr * 0.01)) * Math.exp(-t * 6);
+      d[st + k] = Math.max(-32767, Math.min(32767, d[st + k] + Math.sin(2 * Math.PI * f * t) * env * vol * 32767)); } });
+  const buf = new ArrayBuffer(44 + len * 2), v = new DataView(buf), w = (o, str) => [...str].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + len * 2, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, len * 2, true);
+  new Int16Array(buf, 44).set(d);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+function tone(kind) {
+  if (!tones[kind]) tones[kind] = kind === "repeat" ? wav([880, 660, 880, 660, 880, 660, 880, 660], 0.2, 0.9) : kind === "stamp" ? wav([1046, 1318], 0.14, 0.6) : kind === "mute" ? wav([20], 0.05, 0) : wav([784, 1046, 1318, 1046, 1318], 0.15, 0.8);
+  return tones[kind];
+}
+let player = null, unlocked = false;
+function unlockAudio() {
+  if (unlocked) return; unlocked = true;
+  try { player = new Audio(); player.setAttribute("playsinline", ""); player.src = tone("mute"); player.play().catch(() => { unlocked = false; }); } catch(e) { unlocked = false; }
+}
+document.addEventListener("touchend", unlockAudio, { passive: true }); document.addEventListener("click", unlockAudio);
 function chime(kind) {
-  if (kind === "silent" || !actx) return;
-  const notes = kind === "repeat" ? [880, 660, 880, 660, 880, 660] : kind === "stamp" ? [1046, 1318] : [784, 1046, 1318];
-  const t0 = actx.currentTime + 0.02, step = kind === "repeat" ? 0.22 : 0.16;
-  notes.forEach((f, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f;
-    g.gain.setValueAtTime(0, t0 + i*step); g.gain.linearRampToValueAtTime(kind === "repeat" ? 0.5 : 0.35, t0 + i*step + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + i*step + step*1.4);
-    o.connect(g).connect(actx.destination); o.start(t0 + i*step); o.stop(t0 + i*step + step*1.5); });
+  if (kind === "silent") return;
+  try { if (!player) player = new Audio(); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal"); player.currentTime = 0; player.play().catch(() => {}); } catch(e) {}
   if (navigator.vibrate) navigator.vibrate(kind === "repeat" ? [300,120,300,120,300] : [150,80,150]);
 }
 
@@ -868,7 +884,7 @@ document.addEventListener("click", async e => {
   else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; try { history.replaceState(null, "", location.pathname); } catch(e) {} render(); }
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
-  else if (a === "sound") { unlockAudio(); setTimeout(() => chime("normal"), 60); toast("アプリを開いている時は、この音が鳴ります。閉じている時はスマホの通知音です", 5000); }
+  else if (a === "sound") { unlocked = true; chime("normal"); toast("この音が鳴れば、アプリを開いている時の音はOKです。鳴らない時は本体の音量を上げてください", 5000); }
   else if (a === "done") { celebrate(); act("doneTask", { id }); }
   else if (a === "dpick") { const d = Number(v); ui.pick = ui.pick && ui.pick.id === id && ui.pick.day === d ? null : { id, day: d }; render(); }
   else if (a === "dset") { const day = Number(b.dataset.day); ui.pick = null; act("setRotDay", { id, day, who: v }, v ? WD[day] + "曜を" + nm(v) + "さんにしました" : WD[day] + "曜の当番をなしにしました"); }
