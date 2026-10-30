@@ -231,7 +231,7 @@ const ss = { get(k){ try { return sessionStorage.getItem(k) || ""; } catch(e){ r
 
 let cfg = ls.get("genba") || {};            // {url, code, me}
 let S = null;                               // 受付係から届いた状態
-let tab = "mine", busy = false, flashId = "", pin = ss.get("genba-pin");
+let tab = "mine", busy = false, flashId = "", pin = ls.get("genba-pin") || "";
 let adm = null;                             // 管理画面の編集中データ
 let F = null;                               // やることの登録・編集フォーム
 let N = null;                               // 連絡フォーム
@@ -455,7 +455,7 @@ async function testPush() {
 function pushBanner() {
   if (pushOn) return "";
   if (!pushable && isIOS && !standalone) return `<div class="banner warn"><b>通知を受け取るには、ホーム画面に追加してください</b>
-    <ol class="steps"><li>この画面を<b>Safari</b>で開く</li><li>下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す</li><li>ホーム画面の「現場ノート」から開き直して、「通知をオンにする」を押す</li></ol></div>`;
+    <ol class="steps"><li>この画面を<b>Safari</b>で開く</li><li>下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す（この画面のまま追加すると、次からは入力なしで開けます）</li><li>ホーム画面の「現場ノート」から開き直して、「通知をオンにする」を押す</li></ol></div>`;
   if (!pushable) return `<div class="banner warn"><b>このブラウザでは通知が使えません</b><p>iPhoneはSafari、AndroidはChromeで開いてください。</p></div>`;
   if (Notification.permission === "denied") return `<div class="banner err"><b>通知が止められています</b><p>スマホの設定 → 通知 →「現場ノート」（またはブラウザ）をオンにしてから、下のボタンを押してください。</p><button class="btn primary" data-a="push">通知をオンにする</button></div>`;
   return `<div class="banner warn"><b>通知がまだオフです</b><p>期限やお休みの連絡が、このスマホに届くようにします。</p><button class="btn primary big" data-a="push" ${busy?"disabled":""}>通知をオンにする</button></div>`;
@@ -864,8 +864,8 @@ document.addEventListener("click", async e => {
   if (a === "calm") { const k = b.dataset.k; const [y,m] = ui.calMonth.split("-").map(Number); const d = new Date(y, m - 1 + Number(v), 1); ui.calMonth = d.getFullYear() + "-" + pad(d.getMonth()+1); if (k.startsWith("N.")) syncNotice(); reRender(k); return; }
   if (a === "cald") { const k = b.dataset.k; if (k.startsWith("N.")) syncNotice(); setV(k, v); if (k === "N.from" && (!N.range || N.to < v)) N.to = v; if (k === "F.date" && F.rep !== "none" && F.days.length <= 1) F.days = [new Date(v + "T00:00").getDay()]; ui.cal = ""; reRender(k); return; }
   if (a === "setup") { ui.setup = v; render(); }
-  else if (a === "pick") { cfg.me = id; ls.set("genba", cfg); tab = "mine"; render(); swInit(); }
-  else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; render(); }
+  else if (a === "pick") { cfg.me = id; ls.set("genba", cfg); remember(); tab = "mine"; render(); swInit(); }
+  else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; try { history.replaceState(null, "", location.pathname); } catch(e) {} render(); }
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
   else if (a === "sound") { unlockAudio(); setTimeout(() => chime("normal"), 60); toast("アプリを開いている時は、この音が鳴ります。閉じている時はスマホの通知音です", 5000); }
@@ -936,7 +936,7 @@ document.addEventListener("change", e => {
 async function adminSave(action, body, msg) {
   if (busy) return; busy = true; render();
   try { await api(action, { pin, ...body }); adm = null; toast(msg); }
-  catch(e) { toast(e.message, 5000); if (/暗証番号/.test(e.message)) { pin = ""; ss.set("genba-pin", ""); } }
+  catch(e) { toast(e.message, 5000); if (/暗証番号/.test(e.message)) { pin = ""; ls.set("genba-pin", ""); } }
   busy = false; render();
 }
 document.addEventListener("submit", async e => {
@@ -968,7 +968,7 @@ document.addEventListener("submit", async e => {
     try {
       cfg = { url, code };
       const r = await api("init", { pin: pin_, name }, url);
-      cfg.me = r.ownerId; ls.set("genba", cfg); pin = pin_; ss.set("genba-pin", pin_); tab = "admin";
+      cfg.me = r.ownerId; ls.set("genba", cfg); remember(); pin = pin_; ls.set("genba-pin", pin_); tab = "admin";
       toast(r.trigger ? "初期設定ができました" : "初期設定はできましたが、自動チェックの登録に失敗しました。受付係で setupTrigger を1回実行してください", 7000);
       swInit();
     } catch(x) { cfg = {}; toast(x.message, 6000); }
@@ -981,7 +981,7 @@ document.addEventListener("submit", async e => {
   else if (f.id === "pinForm") {
     const p = $("#pinIn").value.trim(); if (!p) return;
     busy = true; render();
-    try { await api("adminCheck", { pin: p }); pin = p; ss.set("genba-pin", p); adm = null; } catch(x) { toast(x.message, 4000); }
+    try { await api("adminCheck", { pin: p }); pin = p; ls.set("genba-pin", p); adm = null; } catch(x) { toast(x.message, 4000); }
     busy = false; render();
   }
   else if (f.id === "staffAdd") {
@@ -993,16 +993,27 @@ document.addEventListener("submit", async e => {
     if (body.newPin && !/^\d{4}$/.test(body.newPin)) { toast("暗証番号は数字4けたです"); return; }
     if (body.newCode && body.newCode.length < 4) { toast("合言葉は4文字以上にしてください"); return; }
     await adminSave("saveConfig", body, "保存しました");
-    if (body.newPin) { pin = body.newPin; ss.set("genba-pin", pin); }
-    if (body.newCode) { cfg.code = body.newCode; ls.set("genba", cfg); toast("合言葉を変えました。社員には新しい招待リンクを送ってください", 6000); }
+    if (body.newPin) { pin = body.newPin; ls.set("genba-pin", pin); }
+    if (body.newCode) { cfg.code = body.newCode; ls.set("genba", cfg); remember(); toast("合言葉を変えました。社員には新しい招待リンクを送ってください", 6000); }
   }
 });
 async function join(url, code) {
   busy = true; render();
   const prev = cfg;
-  try { cfg = { url, code }; await api("state"); ls.set("genba", cfg); }
+  try { cfg = { url, code, me: prev.url === url && prev.code === code ? prev.me : undefined }; await api("state"); ls.set("genba", cfg); remember(); }
   catch(x) { cfg = prev.url ? prev : {}; S = null; toast(x.message, 6000); }
   busy = false; render();
+}
+
+/* ---------- この端末を覚える ----------
+   iPhoneはSafariとホーム画面のアプリで保存場所が別なので、アドレスに「?k=」を付けておき、
+   ホーム画面に追加した時もそのまま入れるようにする */
+const b64e = o => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const b64d = t => JSON.parse(decodeURIComponent(escape(atob(t.replace(/-/g,"+").replace(/_/g,"/")))));
+function remember() {
+  if (!cfg.url || !cfg.code) return;
+  const k = b64e(cfg.me ? { u: cfg.url, c: cfg.code, m: cfg.me } : { u: cfg.url, c: cfg.code });
+  try { history.replaceState(null, "", location.pathname + "?k=" + k + location.hash); } catch(e) {}
 }
 
 /* ---------- 起動 ---------- */
@@ -1015,12 +1026,17 @@ function route() {
   else if (h === "#all") { tab = "all"; }
 }
 (async function start() {
-  const m = location.hash.match(/^#j=([\w-]+)/);
-  if (m) {
-    try { const j = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,"+").replace(/_/g,"/"))))); history.replaceState(null, "", location.pathname);
-      if (j.u !== cfg.url || j.c !== cfg.code) { await join(j.u, j.c); } } catch(e) { toast("招待リンクが読めませんでした。もう一度開いてください", 5000); }
+  const m = location.hash.match(/^#j=([\w-]+)/), q = new URLSearchParams(location.search).get("k");
+  const tok = m ? m[1] : q;
+  if (m) { try { history.replaceState(null, "", location.pathname + location.search); } catch(e) {} }
+  if (tok) {
+    try { const j = b64d(tok);
+      if (j.u !== cfg.url || j.c !== cfg.code) { await join(j.u, j.c); }
+      if (j.m && !cfg.me && cfg.url === j.u) { cfg.me = j.m; ls.set("genba", cfg); }
+    } catch(e) { toast("招待リンクが読めませんでした。もう一度開いてください", 5000); }
   }
   if (cfg.url) await refresh(false);
+  remember();
   route(); render(); swInit();
   window.addEventListener("hashchange", () => { route(); render(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
