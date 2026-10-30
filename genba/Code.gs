@@ -9,14 +9,14 @@ var APP_URL = "https://unagi-mogami.github.io/mogami-partner/genba/";
 var LIB_URL = APP_URL + "webpush-lib.js";
 var LIB_SHA = "95ce10bc14b5cffd1429aea43768595d4a24097acc88216bc540bcbc6479700e";
 var TZ = "Asia/Tokyo";
-var STAMPS = { arigato: "🙏 ありがとう", otsukare: "💪 おつかれ！", sugoi: "✨ すごい！", tasukatta: "🙌 助かった", nice: "👍 ナイス", unagi: "🐟 うなぎのぼり！", odaiji: "🍵 お大事に", ryokai: "👌 了解" };
+var STAMPS = { arigato: "🙏 ありがとう", otsukare: "💪 おつかれ！", sugoi: "✨ すごい！", tasukatta: "🙌 助かった", nice: "👍 ナイス", unagi: "🐟 うなぎのぼり！", odaiji: "🍵 お大事に", ryokai: "👌 了解", ganbare: "📣 がんばって！", yoroshiku: "🤝 よろしく！" };
 var LEAD = 12 * 3600e3;          // 繰り返しのやることを、期限の何時間前に出すか
 var DAY = 864e5;
 
 var SCHEMA = {
   staff:    ["id:s", "name:s", "leader:b", "owner:b", "active:b"],
   tasks:    ["id:s", "what:s", "who:s", "due:n", "by:s", "at:n", "done:b", "doneBy:s", "doneAt:n", "n1:n", "n2:n", "mode:s", "doneMap:j", "remind:n", "n0:n", "series:s", "alarm:s", "nrep:n", "note:s", "lastNudge:j", "cat:s"],
-  series:   ["id:s", "what:s", "who:s", "mode:s", "remind:n", "rule:j", "start:n", "last:n", "by:s", "at:n", "active:b", "alarm:s", "note:s", "rot:j", "cat:s"],
+  series:   ["id:s", "what:s", "who:s", "mode:s", "remind:n", "rule:j", "start:n", "last:n", "by:s", "at:n", "active:b", "alarm:s", "note:s", "rot:j", "cat:s", "duty:b"],
   areas:    ["id:s", "name:s", "ord:n", "deadline:s", "d0:s", "d1:s", "d2:s", "d3:s", "d4:s", "d5:s", "d6:s"],
   cleanlog: ["key:s", "date:s", "area:s", "by:s", "at:n"],
   notices:  ["id:s", "kind:s", "who:s", "from:s", "to:s", "note:s", "notifyAt:n", "notifyTo:s", "sent:n", "by:s", "at:n", "to2:s"],
@@ -68,7 +68,7 @@ function handle(req) {
         if (!f) return { ok: false, err: "input" };
         var t = { cat: f.cat, id: uid(), what: f.what, who: f.rot ? f.dayWho : f.who.join(","), due: f.due, by: by, at: now, done: false, doneBy: "", doneAt: 0, n1: 0, n2: 0, mode: f.mode, doneMap: {}, remind: f.remind, n0: 0, series: "", alarm: f.alarm, nrep: 0, note: f.note, lastNudge: {} };
         if (f.rule) {
-          var s = { rot: f.rot, cat: f.cat, id: uid(), what: f.what, who: f.who.join(","), mode: f.mode, remind: f.remind, rule: f.rule, start: f.due, last: f.due, by: by, at: now, active: true, alarm: f.alarm, note: f.note };
+          var s = { duty: !!f.rot, rot: f.rot, cat: f.cat, id: uid(), what: f.what, who: f.who.join(","), mode: f.mode, remind: f.remind, rule: f.rule, start: f.due, last: f.due, by: by, at: now, active: true, alarm: f.alarm, note: f.note };
           db.series.push(s); save(db, "series");
           t.series = s.id; t.id = s.id + "-" + f.due.toString(36);
         }
@@ -89,11 +89,11 @@ function handle(req) {
         if (si >= 0) {
           var s2 = db.series[si];
           if (!g.rule) s2.active = false;
-          else { s2.rot = g.rot; s2.cat = g.cat; s2.what = g.what; s2.who = g.who.join(","); s2.mode = g.mode; s2.remind = g.remind; s2.alarm = g.alarm; s2.note = g.note; s2.rule = g.rule; s2.start = g.due; s2.last = Math.max(g.due, s2.last); }
+          else { s2.duty = !!g.rot; s2.rot = g.rot; s2.cat = g.cat; s2.what = g.what; s2.who = g.who.join(","); s2.mode = g.mode; s2.remind = g.remind; s2.alarm = g.alarm; s2.note = g.note; s2.rule = g.rule; s2.start = g.due; s2.last = Math.max(g.due, s2.last); }
           db.tasks.forEach(function (x) { if (x.series === s2.id && !x.done && x.id !== t2.id && g.rule) { x.cat = g.cat; x.what = g.what; x.who = g.rot ? (g.rot[wdOf(x.due)] || x.who) : g.who.join(","); x.mode = g.mode; x.remind = g.remind; x.alarm = g.alarm; x.note = g.note; } });
           save(db, "series");
         } else if (g.rule) {
-          var s3 = { rot: g.rot, cat: g.cat, id: uid(), what: g.what, who: g.who.join(","), mode: g.mode, remind: g.remind, rule: g.rule, start: g.due, last: g.due, by: by, at: now, active: true, alarm: g.alarm, note: g.note };
+          var s3 = { duty: !!g.rot, rot: g.rot, cat: g.cat, id: uid(), what: g.what, who: g.who.join(","), mode: g.mode, remind: g.remind, rule: g.rule, start: g.due, last: g.due, by: by, at: now, active: true, alarm: g.alarm, note: g.note };
           db.series.push(s3); save(db, "series"); t2.series = s3.id;
         }
         save(db, "tasks");
@@ -119,6 +119,32 @@ function handle(req) {
           else if (t3.mode !== "all") t3.doneMap = {};
         }
         save(db, "tasks");
+        break;
+      }
+
+      case "setRotDay": {
+        var ri = indexBy(db.series, "id", req.id), day = String(req.day);
+        if (ri < 0 || !/^[0-6]$/.test(day)) return { ok: false, err: "input" };
+        var sr = db.series[ri], nwho = String(req.who || "");
+        if (nwho && !staffById(db, nwho)) return { ok: false, err: "input" };
+        sr.rot = sr.rot || {}; var prev = sr.rot[day] || "";
+        if (nwho) sr.rot[day] = nwho; else delete sr.rot[day];
+        var days = Object.keys(sr.rot).map(Number).sort();
+        sr.rule = { type: "weekly", every: 1, days: days, dom: 1 }; sr.duty = true;
+        sr.who = days.map(function (d) { return sr.rot[d]; }).filter(function (w, i, arr) { return arr.indexOf(w) === i; }).join(",");
+        if (!prev && nwho) {           // その曜日が新しく増えた時は、今週分から出す
+          var st0 = at(today(), Utilities.formatDate(new Date(sr.start), TZ, "HH:mm"));
+          sr.last = Math.min(sr.last, now - 60000);
+          if (sr.start > now) sr.start = st0;
+        }
+        db.tasks = db.tasks.filter(function (x) {
+          if (x.series !== sr.id || x.done || String(wdOf(x.due)) !== day) return true;
+          if (!nwho) return false;          // その曜日の当番をなくしたら、出ている分も消す
+          x.who = nwho; return true;
+        });
+        generate(db, now);
+        save(db, "series"); save(db, "tasks");
+        if (nwho && nwho !== prev && nwho !== by) push(db, P, [nwho], { title: "🔄 当番になりました：" + sr.what, body: "毎週" + "日月火水木金土".charAt(+day) + "曜日 " + Utilities.formatDate(new Date(sr.start), TZ, "H:mm") + (by ? "（" + nameOf(db, by) + "さんが設定）" : ""), tag: "r" + sr.id + day, url: APP_URL + "#duty" });
         break;
       }
 
@@ -191,7 +217,7 @@ function handle(req) {
         if (!STAMPS[req.stamp] || !staffById(db, by)) return { ok: false, err: "input" };
         var tg = String(req.target || ""), rcpt = [], about = "";
         var ti = indexBy(db.tasks, "id", tg), ni = indexBy(db.notices, "id", tg);
-        if (ti >= 0) { var tt = db.tasks[ti]; about = tt.what; rcpt = tt.mode === "all" ? Object.keys(tt.doneMap || {}) : (tt.doneBy ? [tt.doneBy] : whoList(tt)); }
+        if (ti >= 0) { var tt = db.tasks[ti]; about = tt.what; rcpt = !tt.done ? pending(tt) : tt.mode === "all" ? Object.keys(tt.doneMap || {}) : [tt.doneBy]; }
         else if (ni >= 0) { var nn = db.notices[ni]; about = nn.kind === "連絡" || nn.kind === "メッセージ" ? nn.note : nn.kind; rcpt = [nn.who || nn.by]; }
         else if (/^c:/.test(tg)) { var ci = indexBy(db.cleanlog, "key", tg.slice(2)); if (ci < 0) return { ok: false, err: "gone" }; rcpt = [db.cleanlog[ci].by]; var ar0 = db.areas[indexBy(db.areas, "id", db.cleanlog[ci].area)]; about = (ar0 ? ar0.name : "") + "の掃除"; }
         else return { ok: false, err: "gone" };
@@ -346,7 +372,7 @@ function migrateAreas(db, ownerId) {
     if (!days.length) return;
     var start = at(today(), a.deadline || "06:00");
     var who = Object.keys(rot).map(function (k) { return rot[k]; }).filter(function (w, i, arr) { return arr.indexOf(w) === i; });
-    db.series.push({ id: uid(), what: a.name + "の掃除", who: who.join(","), mode: "any", remind: 0, rule: { type: "weekly", every: 1, days: days, dom: 1 }, start: start, last: start - 60000, by: ow, at: now, active: true, alarm: "normal", note: "", rot: rot, cat: "掃除" });
+    db.series.push({ id: uid(), what: a.name + "の掃除", who: who.join(","), mode: "any", remind: 0, rule: { type: "weekly", every: 1, days: days, dom: 1 }, start: start, last: start - 60000, by: ow, at: now, active: true, alarm: "normal", note: "", rot: rot, cat: "掃除", duty: true });
     made = true;
   });
   if (db.areas.length) { db.areas = []; save(db, "areas"); }
