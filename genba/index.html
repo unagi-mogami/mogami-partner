@@ -468,6 +468,32 @@ async function testPush() {
   catch(e) { toast(e.message, 5000); }
   busy = false; render();
 }
+let diag = { sub: null };
+async function diagCheck() {
+  try { const r = swReg || (await navigator.serviceWorker.getRegistration()); diag.sub = r && r.pushManager ? !!(await r.pushManager.getSubscription()) : null; } catch(e) { diag.sub = null; }
+}
+function diagPanel() {
+  const ios = (navigator.userAgent.match(/OS (\d+)_(\d+)/) || []).slice(1).join(".");
+  const perm = !("Notification" in window) ? "使えない" : Notification.permission === "granted" ? "許可済み ✅" : Notification.permission === "denied" ? "拒否されている ❌" : "まだ聞いていない ⚠️";
+  const rows = [
+    ["開き方", standalone ? "ホーム画面のアプリ ✅" : "ブラウザ ⚠️（ホーム画面のアイコンから開いてください）"],
+    ["iPhoneのバージョン", isIOS ? (ios || "不明") + (ios && Number(ios.split(".")[0]) < 16.4 && !(Number(ios.split(".")[0]) === 16 && Number(ios.split(".")[1]) >= 4) ? " ⚠️ 16.4以上が必要" : "") : "iPhoneではない"],
+    ["通知の機能", pushable ? "使える ✅" : "使えない ❌"],
+    ["通知の許可", perm],
+    ["このスマホの受け取り登録", diag.sub === null ? "確認できない" : diag.sub ? "あり ✅" : "なし ❌"],
+    ["受付係に届いている登録", (S.notif[cfg.me] || 0) + "台" + ((S.notif[cfg.me] || 0) ? " ✅" : " ❌")]
+  ];
+  return `<details class="panel" ${pushOn ? "" : "open"}><summary style="font-weight:700;cursor:pointer">🔔 通知の状態を確かめる</summary>
+    <div class="rank" style="grid-template-columns:auto 1fr;margin-top:8px">${rows.map(([k,v]) => `<span class="h" style="font-size:13px">${k}</span><span>${v}</span>`).join("")}</div>
+    <div class="acts"><button class="btn sm primary" data-a="repush">通知の設定をやり直す</button><button class="btn sm" data-a="test">テスト通知を送る</button><button class="btn sm ghost" data-a="sound">🔊 音を確かめる</button></div>
+    <p class="hint">テスト通知が届くと、iPhoneの「設定 → 通知」の一覧に「現場ノート」が出てきます。そこで「サウンド」をオンにしてください。</p></details>`;
+}
+async function rePush() {
+  if (busy) return;
+  try { const r = swReg || (await navigator.serviceWorker.register("sw.js")); const sub = r.pushManager && await r.pushManager.getSubscription();
+    if (sub) { await api("unsubscribe", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); } } catch(e) {}
+  pushOn = false; await enablePush(); await diagCheck(); render();
+}
 function pushBanner() {
   if (pushOn) return "";
   if (!pushable && isIOS && !standalone) return `<div class="banner warn"><b>通知を受け取るには、ホーム画面に追加してください</b>
@@ -578,7 +604,7 @@ function viewMine() {
     <section class="list"><h2>自分のやること <span class="muted small">カードを長押しでスタンプ</span></h2>
     ${mine.length ? mine.map(taskCard).join("") : (cl.length ? "" : `<div class="empty">今、自分の分はありません。<br>「あとでやります」は右下の「＋ やることを追加」から登録します。</div>`)}</section>
     ${weekPanel(true)}
-    <div class="acts"><button class="btn ghost sm" data-a="sound">🔊 音を確かめる</button>${pushOn ? `<button class="btn ghost sm" data-a="test">テスト通知を送る</button>` : ""}</div>`;
+    ${diagPanel()}`;
 }
 
 /* ---------- 画面：みんな ---------- */
@@ -884,6 +910,7 @@ document.addEventListener("click", async e => {
   else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; try { history.replaceState(null, "", location.pathname); } catch(e) {} render(); }
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
+  else if (a === "repush") rePush();
   else if (a === "sound") { unlocked = true; chime("normal"); toast("この音が鳴れば、アプリを開いている時の音はOKです。鳴らない時は本体の音量を上げてください", 5000); }
   else if (a === "done") { celebrate(); act("doneTask", { id }); }
   else if (a === "dpick") { const d = Number(v); ui.pick = ui.pick && ui.pick.id === id && ui.pick.day === d ? null : { id, day: d }; render(); }
@@ -1053,7 +1080,7 @@ function route() {
   }
   if (cfg.url) await refresh(false);
   remember();
-  route(); render(); swInit();
+  route(); render(); swInit().then(() => diagCheck()).then(render);
   window.addEventListener("hashchange", () => { route(); render(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
   setInterval(() => { if (document.visibilityState === "visible" && !busy && !F && !N && !ui.nudge && !document.activeElement.matches("input,select,textarea")) refresh(true); }, 60000);
