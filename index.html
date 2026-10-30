@@ -3472,8 +3472,7 @@ function resDetail(r){
   return h("div",{class:"stack",style:"gap:8px"},
     r.kind==="deal" ? h("div",{class:"small"}, (r.product||"")+(r.size && r.size!=="any" ? " "+r.size : "")+"　"+num(r.kg,1).replace(/\.0$/,"")+"kg × "+yen(r.price)+"/kg"+(r.newDeal===false?"（既存）":"（新規）")+(gp[r.id] ? "　粗利 "+yen(gp[r.id].gp) : "")) : null,
     h("div",{class:"small muted"}, fmtDate(r.date||r.at)+"　"+(r.name||"")),
-    r.kind==="quote" && r.quote ? qtSnapView(r) : null,
-    recExtras(r, ""),
+    recExtras(r, ""),   /* 見積書の記録は recExtras が明細の下に「見積書を見る」を出す（ここでも出すと2つ並ぶ） */
     h("div",{class:"row"}, karteLink(r.shop), h("span",{style:"margin-left:auto"}, deleteControl("rd:"+r.id, "削除", ()=>resDelete(r)))));
 }
 function resPeriod(r){
