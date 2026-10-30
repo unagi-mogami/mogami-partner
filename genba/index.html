@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1B1F1D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="現場ノート">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>もがみ 現場ノート</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap">
+<style>
+/* Layout: 墨のトップバー＋下部タブ。和紙白の作業面に深緑の操作、期限切れは朱で一目に。 */
+:root{
+  --paper:#F5F6F2; --surface:#FFFFFF; --sunk:#EEF0EB;
+  --ink:#1B1F1D; --ink-2:#4B534E; --muted:#6E7671; --line:#DADED6;
+  --green:#1F4A3A; --on-green:#FFFFFF; --green-soft:#E2EBE5;
+  --sumi:#1B1F1D; --on-sumi:#F2F3EF;
+  --amber:#8A5A1F; --amber-soft:#F3E8D7; --red:#A23B2C; --red-soft:#F5E1DC;
+  --f-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#121513; --surface:#1A1E1B; --sunk:#222723; --ink:#ECEFEA; --ink-2:#C2C8C3; --muted:#9AA29C; --line:#333A35;
+  --green:#8FC3A8; --on-green:#0F1F18; --green-soft:#21342B; --sumi:#0B0D0C; --on-sumi:#ECEFEA;
+  --amber:#E8B66B; --amber-soft:#352A17; --red:#FF8F7E; --red-soft:#3A201B; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%;padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+header.bar{background:var(--sumi);color:var(--on-sumi);padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:20}
+header.bar h1{margin:0;font-family:var(--f-display);font-size:20px;letter-spacing:.06em}
+header.bar small{display:block;font-size:11px;letter-spacing:.2em;opacity:.7}
+header.bar .who{font-size:14px;text-align:right}
+header.bar .who b{font-size:16px}
+main{max-width:640px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+h2{margin:4px 0 0;font-size:18px;font-weight:900;text-wrap:balance}
+h3{margin:0;font-size:13px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:13px}
+input,select{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;min-height:48px;width:100%;min-width:0}
+input:focus,select:focus,button:focus-visible{outline:3px solid var(--green);outline-offset:1px}
+.bad{border-color:var(--red)!important;background:var(--red-soft)!important}
+.btn{font:inherit;font-weight:700;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 16px;min-height:48px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.btn.primary{background:var(--green);border-color:var(--green);color:var(--on-green)}
+.btn.big{width:100%;min-height:56px;font-size:17px}
+.btn.done{background:var(--green);border-color:var(--green);color:var(--on-green);min-width:120px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--red);border-color:var(--red);background:transparent}
+.btn.sm{min-height:40px;padding:6px 12px;font-size:14px}
+.btn:disabled{opacity:.5}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:13px;font-weight:700;color:var(--ink-2)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{font:inherit;font-size:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:6px 14px;min-height:40px;cursor:pointer}
+.chips button[aria-pressed="true"]{border-color:var(--green);background:var(--green-soft);color:var(--ink);font-weight:700}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{background:var(--surface);border:1px solid var(--line);border-left:7px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.item.late{border-left-color:var(--red);background:linear-gradient(90deg,var(--red-soft),var(--surface) 60%)}
+.item.soon{border-left-color:var(--amber)}
+.item.ok{border-left-color:var(--green)}
+.item.fin{opacity:.75;border-left-color:var(--green)}
+.item.flash{outline:3px solid var(--amber)}
+.item .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.item .t{font-weight:700;font-size:17px;min-width:0;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
+.pill{font-size:12px;font-weight:700;border-radius:999px;padding:2px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill.late{background:var(--red);color:var(--surface)}
+.pill.soon{background:var(--amber-soft);color:var(--amber)}
+.pill.ok{background:var(--green-soft);color:var(--green)}
+.pill.off{background:var(--sunk);color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.empty{border:1.5px dashed var(--line);border-radius:12px;padding:18px;color:var(--muted);text-align:center;font-size:14px}
+.banner{border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.banner.warn{background:var(--amber-soft);color:var(--ink)}
+.banner.err{background:var(--red-soft);color:var(--ink)}
+.banner.ok{background:var(--green-soft);color:var(--ink)}
+.banner b{font-size:15px}
+ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs button{font:inherit;font-size:12px;font-weight:700;color:var(--muted);background:none;border:0;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:54px;cursor:pointer;position:relative}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button[aria-current="page"]{color:var(--green)}
+nav.tabs .dot{position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;border-radius:999px;font-size:11px;min-width:18px;height:18px;line-height:18px;padding:0 5px}
+.person{display:flex;flex-direction:column;gap:8px}
+.person h3{display:flex;justify-content:space-between}
+.grid{overflow-x:auto}
+table.days{border-collapse:collapse;font-size:13px;width:100%;min-width:520px}
+table.days th,table.days td{padding:4px 3px;border-bottom:1px solid var(--line);text-align:left}
+table.days th{color:var(--muted)}
+table.days select{min-height:38px;padding:4px;font-size:13px}
+table.days input{min-height:38px;padding:4px 6px;font-size:14px}
+.staff-row{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.staff-row .nm{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.toggle{font:inherit;font-size:12px;border:1.5px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--surface);color:var(--muted);cursor:pointer;min-height:34px}
+.toggle[aria-pressed="true"]{border-color:var(--green);color:var(--green);font-weight:700;background:var(--green-soft)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--sumi);color:var(--on-sumi);padding:10px 18px;border-radius:999px;font-size:14px;z-index:50;max-width:90vw}
+.names{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.names .btn{min-height:56px}
+.copybox{font-size:12px;word-break:break-all;background:var(--sunk);border-radius:8px;padding:8px;user-select:all}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="bar"><div><small>株式会社もがみ</small><h1>現場ノート</h1></div><div class="who" id="who"></div></header>
+<main id="app"><div class="empty">読み込み中です…</div></main>
+<nav class="tabs" id="tabs" hidden></nav>
+<script>
+"use strict";
+const WD = ["日","月","火","水","木","金","土"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2, "0");
+const ls = { get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
+const ss = { get(k){ try { return sessionStorage.getItem(k) || ""; } catch(e){ return ""; } }, set(k,v){ try { sessionStorage.setItem(k, v); } catch(e){} } };
+
+let cfg = ls.get("genba") || {};            // {url, code, me}
+let S = null;                               // サーバーの状態
+let tab = "mine", busy = false, flashId = "", pin = ss.get("genba-pin");
+let adm = null;                             // 管理画面の編集中データ
+let ui = { taskWho: "", due: "", setup: "", allFilter: "late" };
+
+/* ---------- 受付係とのやりとり ---------- */
+const ERR = { code:"合言葉が違います。社長から届いた招待リンクを開き直してください。", pin:"暗証番号が違います。", locked:"間違いが続いたので15分間止めています。少し待ってからもう一度。",
+  notready:"受付係の初期設定がまだです。社長の初期設定をしてください。", already:"初期設定はもう済んでいます。招待リンクから入ってください。", input:"入力に足りないところがあります。", noowner:"社長を1人以上残してください。" };
+async function api(action, body = {}, url = cfg.url) {
+  let r;
+  try {
+    r = await fetch(url, { method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({ action, code: cfg.code, ...body }) });
+  } catch(e) { throw new Error("つながりませんでした。電波を確認して、もう一度押してください。"); }
+  let j; try { j = await r.json(); } catch(e) { throw new Error("受付係から正しい返事がありません。URLが合っているか確認してください。"); }
+  if (!j.ok) throw new Error(ERR[j.err] || ("うまくいきませんでした（" + (j.err || "エラー") + "）"));
+  if (j.state) S = j.state;
+  return j;
+}
+async function act(action, body, okMsg) {
+  if (busy) return; busy = true;
+  try { await api(action, { by: cfg.me, ...body }); if (okMsg) toast(okMsg); }
+  catch(e) { toast(e.message, 5000); }
+  busy = false; render();
+}
+async function refresh(quiet) {
+  if (!cfg.url) return;
+  try { await api("state"); } catch(e) { if (!quiet) toast(e.message, 5000); }
+  render();
+}
+
+/* ---------- 便利関数 ---------- */
+const staff = id => (S && S.staff.find(s => s.id === id)) || null;
+const nm = id => (staff(id) || {}).name || "（いない人）";
+const meObj = () => staff(cfg.me);
+const isOwner = () => !!(meObj() && meObj().owner);
+const fmt = ms => { const d = new Date(ms); return (d.getMonth()+1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ") " + d.getHours() + ":" + pad(d.getMinutes()); };
+const hmOnly = ms => { const d = new Date(ms); return d.getHours() + ":" + pad(d.getMinutes()); };
+const span = ms => { const m = Math.round(Math.abs(ms)/60000); if (m < 60) return m + "分"; const h = Math.floor(m/60); return h < 48 ? h + "時間" + (m%60 && h < 6 ? (m%60) + "分" : "") : Math.floor(h/24) + "日"; };
+const localDT = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+function taskState(t) { const d = t.due - Date.now(); return t.done ? "fin" : d < 0 ? "late" : d < 3600e3 ? "soon" : "ok"; }
+function toast(t, ms = 2500) { const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), ms); }
+const todayCleanFor = id => S ? S.areas.filter(a => a["d" + S.weekday] === id) : [];
+const cleanLog = aid => S && S.clean.find(c => c.area === aid);
+const cleanDeadline = a => new Date(S.today + "T" + a.deadline + ":00+09:00").getTime();
+
+/* ---------- 通知 ---------- */
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushable = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+let swReg = null, pushOn = false;
+async function swInit() {
+  if (!("serviceWorker" in navigator)) return;
+  try { swReg = await navigator.serviceWorker.register("sw.js"); } catch(e) { return; }
+  if (!pushable) return;
+  try {
+    const sub = await swReg.pushManager.getSubscription();
+    pushOn = !!sub && Notification.permission === "granted";
+    if (pushOn && cfg.me && S) api("subscribe", { staff: cfg.me, sub: sub.toJSON(), ua: uaShort() }).catch(()=>{});
+  } catch(e) {}
+  render();
+}
+function uaShort() { return isIOS ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android" : "その他"; }
+function keyBytes(b64) { const s = atob(b64.replace(/-/g,"+").replace(/_/g,"/") + "===".slice((b64.length + 3) % 4)); return Uint8Array.from(s, c => c.charCodeAt(0)); }
+async function enablePush() {
+  if (busy) return; busy = true; render();
+  try {
+    if (!swReg) swReg = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const p = await Notification.requestPermission();
+    if (p !== "granted") throw new Error(p === "denied" ? "通知が「許可しない」になっています。スマホの設定 → 通知 → 現場ノート をオンにしてください。" : "通知を許可しないと届きません。");
+    let sub = await swReg.pushManager.getSubscription();
+    if (!sub) sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(S.config.vapid) });
+    await api("subscribe", { staff: cfg.me, sub: sub.toJSON(), ua: uaShort() });
+    pushOn = true;
+    const r = await api("testPush", { staff: cfg.me });
+    toast(r.sent ? "テスト通知を送りました。届けば設定完了です" : "登録はできましたが、テスト通知を送れませんでした", 4000);
+  } catch(e) { toast(e.message, 6000); }
+  busy = false; render();
+}
+async function testPush() {
+  if (busy) return; busy = true;
+  try { const r = await api("testPush", { staff: cfg.me }); toast(r.sent ? "テスト通知を送りました" : "送れませんでした。もう一度「通知をオンにする」を押してください", 4000); if (!r.sent) pushOn = false; }
+  catch(e) { toast(e.message, 5000); }
+  busy = false; render();
+}
+function pushBanner() {
+  if (pushOn) return "";
+  if (!pushable && isIOS && !standalone) return `<div class="banner warn"><b>通知を受け取るには、ホーム画面に追加してください</b>
+    <ol class="steps"><li>この画面を<b>Safari</b>で開く</li><li>下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す</li><li>ホーム画面の「現場ノート」から開き直して、「通知をオンにする」を押す</li></ol></div>`;
+  if (!pushable) return `<div class="banner warn"><b>このブラウザでは通知が使えません</b><p>iPhoneはSafari、AndroidはChromeで開いてください。</p></div>`;
+  if (Notification.permission === "denied") return `<div class="banner err"><b>通知が止められています</b><p>スマホの設定 → 通知 →「現場ノート」（またはブラウザ）をオンにしてから、下のボタンを押してください。</p><button class="btn primary" data-a="push">通知をオンにする</button></div>`;
+  return `<div class="banner warn"><b>通知がまだオフです</b><p>期限を過ぎたら、このスマホに知らせが届くようにします。</p><button class="btn primary big" data-a="push" ${busy?"disabled":""}>通知をオンにする</button></div>`;
+}
+
+/* ---------- 画面：最初の設定 ---------- */
+function viewSetup() {
+  if (ui.setup === "owner") return `
+  <form class="panel" id="initForm"><h2>社長の初期設定（最初の1回だけ）</h2>
+    <p class="small muted">受付係（Googleのプログラム）をデプロイしたあとに表示されるURLを貼り付けます。</p>
+    <div class="field"><label for="iUrl">受付係のURL</label><input id="iUrl" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div class="field"><label for="iCode">合言葉（社員と共有。4文字以上）</label><input id="iCode" autocomplete="off" placeholder="例：mogami-kashiwa"></div>
+    <div class="row"><div class="field"><label for="iName">社長の名前</label><input id="iName" autocomplete="off" placeholder="例：最上"></div>
+    <div class="field"><label for="iPin">社長の暗証番号（数字4けた）</label><input id="iPin" inputmode="numeric" maxlength="4" autocomplete="off"></div></div>
+    <button class="btn primary big" ${busy?"disabled":""}>設定を始める</button>
+    <button type="button" class="btn ghost" data-a="setup" data-v="">戻る</button></form>`;
+  if (ui.setup === "join") return `
+  <form class="panel" id="joinForm"><h2>手で入力して参加する</h2>
+    <div class="field"><label for="jUrl">受付係のURL</label><input id="jUrl" inputmode="url" autocomplete="off"></div>
+    <div class="field"><label for="jCode">合言葉</label><input id="jCode" autocomplete="off"></div>
+    <button class="btn primary big" ${busy?"disabled":""}>参加する</button>
+    <button type="button" class="btn ghost" data-a="setup" data-v="">戻る</button></form>`;
+  return `
+  <div class="panel"><h2>はじめに</h2>
+    <p>社長からLINEで届いた<b>招待リンク</b>を開くと、自動で設定されます。</p>
+    <button class="btn" data-a="setup" data-v="join">招待リンクがない（手で入力する）</button>
+    <button class="btn ghost sm" data-a="setup" data-v="owner">社長の初期設定（最初の1回だけ）</button></div>`;
+}
+function viewPick() {
+  const list = S.staff.filter(s => s.active);
+  return `<div class="panel"><h2>あなたの名前を選んでください</h2>
+    <p class="small muted">このスマホはこの名前で記録します。名前がない時は社長に追加してもらってください。</p>
+    <div class="names">${list.map(s => `<button class="btn" data-a="pick" data-id="${esc(s.id)}">${esc(s.name)}</button>`).join("")}</div></div>
+    <button class="btn ghost sm" data-a="reset">参加をやり直す</button>`;
+}
+
+/* ---------- 画面：自分 ---------- */
+function taskCard(t, showWho) {
+  const st = taskState(t), d = t.due - Date.now();
+  const pill = t.done ? `<span class="pill ok">完了</span>` : st === "late" ? `<span class="pill late">${span(d)}遅れ</span>` : `<span class="pill ${st}">あと${span(d)}</span>`;
+  return `<div class="item ${st}${flashId === t.id ? " flash" : ""}" id="task-${esc(t.id)}">
+    <div class="top"><div class="t">${esc(t.what)}</div>${pill}</div>
+    <div class="meta">${showWho ? `<span>担当 <b>${esc(nm(t.who))}</b></span>` : ""}<span>期限 ${esc(fmt(t.due))}</span>${t.by && t.by !== t.who ? `<span>${esc(nm(t.by))}さんから</span>` : ""}${t.done ? `<span>${esc(nm(t.doneBy))}が${esc(hmOnly(t.doneAt))}に完了</span>` : ""}</div>
+    <div class="acts">${t.done ? `<button class="btn sm ghost" data-a="undo" data-id="${esc(t.id)}">未完了に戻す</button>`
+      : `<button class="btn done" data-a="done" data-id="${esc(t.id)}">終わった</button><button class="btn sm ghost" data-a="del" data-id="${esc(t.id)}">消す</button>`}</div></div>`;
+}
+function cleanCard(a) {
+  const log = cleanLog(a.id), who = a["d" + S.weekday], dl = cleanDeadline(a), late = !log && Date.now() > dl;
+  return `<div class="item ${log ? "fin" : late ? "late" : "ok"}">
+    <div class="top"><div class="t">🧹 ${esc(a.name)}</div>${log ? `<span class="pill ok">完了</span>` : late ? `<span class="pill late">${span(Date.now()-dl)}遅れ</span>` : `<span class="pill off">${esc(a.deadline)}まで</span>`}</div>
+    <div class="meta"><span>今日の担当 <b>${who ? esc(nm(who)) : "未設定"}</b></span>${log ? `<span>${esc(nm(log.by))}が${esc(hmOnly(log.at))}に完了</span>` : ""}</div>
+    <div class="acts">${log ? `<button class="btn sm ghost" data-a="cundo" data-id="${esc(a.id)}">取り消す</button>` : `<button class="btn done" data-a="cdone" data-id="${esc(a.id)}">掃除した</button>`}</div></div>`;
+}
+function addForm() {
+  const who = ui.taskWho || cfg.me;
+  return `<form class="panel" id="taskForm"><h2>「あとで」は、ここに登録</h2>
+    <div class="field"><label for="tWhat">何を</label><input id="tWhat" maxlength="80" placeholder="例：冷蔵庫の温度記録を書く" autocomplete="off"></div>
+    <div class="row"><div class="field"><label for="tWho">誰が</label><select id="tWho">${S.staff.filter(s=>s.active).map(s => `<option value="${esc(s.id)}"${s.id===who?" selected":""}>${esc(s.name)}${s.id===cfg.me?"（自分）":""}</option>`).join("")}</select></div>
+    <div class="field"><label for="tDue">何時まで</label><input id="tDue" type="datetime-local" value="${esc(ui.due)}"></div></div>
+    <div class="chips" id="quick">${[["30分後",0.5],["1時間後",1],["2時間後",2],["3時間後",3],["今日中","end"]].map(([l,v]) => `<button type="button" data-h="${v}">${l}</button>`).join("")}</div>
+    <button class="btn primary big" ${busy?"disabled":""}>登録する</button></form>`;
+}
+function viewMine() {
+  const mine = S.tasks.filter(t => !t.done && t.who === cfg.me).sort((a,b) => a.due - b.due);
+  const cl = todayCleanFor(cfg.me);
+  return `${pushBanner()}
+    <section class="list"><h2>自分のやること</h2>
+    ${cl.map(cleanCard).join("")}
+    ${mine.length ? mine.map(t => taskCard(t, false)).join("") : (cl.length ? "" : `<div class="empty">今、自分の分はありません。</div>`)}</section>
+    ${addForm()}
+    ${pushOn ? `<button class="btn ghost sm" data-a="test">テスト通知を送る</button>` : ""}`;
+}
+
+/* ---------- 画面：みんな ---------- */
+function viewAll() {
+  const open = S.tasks.filter(t => !t.done);
+  const now = Date.now();
+  const shown = ui.allFilter === "late" ? open.filter(t => t.due < now) : open;
+  const by = {};
+  shown.forEach(t => (by[t.who] = by[t.who] || []).push(t));
+  const people = Object.keys(by).sort((a,b) => Math.min(...by[a].map(t=>t.due)) - Math.min(...by[b].map(t=>t.due)));
+  const done = S.tasks.filter(t => t.done).sort((a,b) => b.doneAt - a.doneAt);
+  return `<div class="chips"><button data-a="af" data-v="late" aria-pressed="${ui.allFilter==="late"}">期限切れ（${open.filter(t=>t.due<now).length}）</button><button data-a="af" data-v="all" aria-pressed="${ui.allFilter==="all"}">未完了すべて（${open.length}）</button></div>
+    ${people.length ? people.map(id => `<section class="person"><h3><span>${esc(nm(id))}</span><span>${by[id].length}件</span></h3>${by[id].sort((a,b)=>a.due-b.due).map(t => taskCard(t, false)).join("")}</section>`).join("")
+      : `<div class="empty">${ui.allFilter==="late" ? "期限切れはありません。" : "未完了のやることはありません。"}</div>`}
+    <details><summary class="muted" style="font-weight:700;cursor:pointer">この3日間に終わったもの（${done.length}）</summary><div class="list" style="margin-top:10px">${done.map(t => taskCard(t, true)).join("") || `<div class="empty">まだありません</div>`}</div></details>`;
+}
+
+/* ---------- 画面：掃除 ---------- */
+function viewClean() {
+  const d = new Date(S.today + "T00:00:00+09:00");
+  return `<section class="list"><h2>今日の掃除当番　<span class="muted small">${d.getMonth()+1}/${d.getDate()}(${WD[S.weekday]})</span></h2>
+    ${S.areas.length ? S.areas.map(cleanCard).join("") : `<div class="empty">掃除の場所がまだありません。${isOwner() ? "「管理」で決めてください。" : "社長が設定するまでお待ちください。"}</div>`}</section>`;
+}
+
+/* ---------- 画面：管理（社長） ---------- */
+function admInit() {
+  adm = { staff: S.staff.map(s => ({...s})), areas: S.areas.map(a => ({ id:a.id, name:a.name, deadline:a.deadline, days:[0,1,2,3,4,5,6].map(i => a["d"+i] || "") })),
+    escMin: S.config.escMin, summaryTime: S.config.summaryTime, newPin: "", newCode: "", dirtyS:false, dirtyA:false };
+}
+function inviteLink() { return location.origin + location.pathname + "#j=" + btoa(unescape(encodeURIComponent(JSON.stringify({ u: cfg.url, c: cfg.code })))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function inviteText() { return "【もがみ 現場ノート】\n下のリンクを開いて、自分の名前を選んでください。\niPhoneの人は、開いたあと「ホーム画面に追加」→ ホーム画面から開いて「通知をオンにする」まで押してください。\n" + inviteLink(); }
+function viewAdmin() {
+  if (!pin) return `<form class="panel" id="pinForm"><h2>管理（社長のみ）</h2><div class="field"><label for="pinIn">社長の暗証番号</label><input id="pinIn" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></div><button class="btn primary big" ${busy?"disabled":""}>開く</button></form>`;
+  if (!adm) admInit();
+  const act_ = adm.staff.filter(s => s.active !== false);
+  const opts = sel => `<option value="">―</option>` + act_.map(s => `<option value="${esc(s.id)}"${s.id===sel?" selected":""}>${esc(s.name)}</option>`).join("");
+  const offList = act_.filter(s => !S.notif[s.id]);
+  return `
+  <div class="panel"><h2>社員を招待する</h2>
+    <p class="small muted">このリンクをLINEで社員に送ります。開くと自動で設定され、名前を選ぶだけで使えます。</p>
+    <div class="acts"><a class="btn primary" href="https://line.me/R/msg/text/?${encodeURIComponent(inviteText())}" target="_blank" rel="noopener">LINEで送る</a><button class="btn" data-a="copy">文章をコピー</button></div>
+    <div class="copybox">${esc(inviteLink())}</div></div>
+
+  <div class="panel"><h2>社員と役割</h2>
+    <p class="small muted">「責任者」は、期限から${esc(adm.escMin)}分過ぎても終わっていない時に知らせが届く人です。🔔は通知がオンになっている人。</p>
+    ${offList.length ? `<div class="banner warn">通知がまだオフの人：${offList.map(s => esc(s.name)).join("、")}</div>` : `<div class="banner ok">全員の通知がオンです</div>`}
+    <div>${act_.map(s => `<div class="staff-row"><div class="nm">${S.notif[s.id] ? "🔔" : "🔕"} ${esc(s.name)}</div>
+      <button class="toggle" data-a="sl" data-id="${esc(s.id)}" aria-pressed="${!!s.leader}">責任者</button>
+      <button class="toggle" data-a="so" data-id="${esc(s.id)}" aria-pressed="${!!s.owner}">社長</button>
+      <button class="toggle" data-a="sx" data-id="${esc(s.id)}" aria-label="${esc(s.name)}を外す">外す</button></div>`).join("")}</div>
+    <form class="acts" id="staffAdd"><input id="newStaff" placeholder="名前を追加" autocomplete="off" style="flex:1"><button class="btn sm">追加</button></form>
+    <button class="btn primary" data-a="saveStaff" ${adm.dirtyS && !busy ? "" : "disabled"}>社員の変更を保存</button></div>
+
+  <div class="panel"><h2>掃除の場所・期限・曜日ごとの担当</h2>
+    <div class="grid"><table class="days"><tr><th>場所</th><th>期限</th>${WD.map((w,i) => `<th${i===S.weekday?' style="color:var(--green)"':""}>${w}</th>`).join("")}<th></th></tr>
+    ${adm.areas.map((a,k) => `<tr><td><input data-ar="${k}" data-f="name" value="${esc(a.name)}" style="min-width:84px"></td><td><input type="time" data-ar="${k}" data-f="deadline" value="${esc(a.deadline)}"></td>
+      ${a.days.map((v,i) => `<td><select data-ar="${k}" data-d="${i}" aria-label="${esc(a.name)} ${WD[i]}曜">${opts(v)}</select></td>`).join("")}<td><button class="toggle" data-a="ax" data-k="${k}" aria-label="${esc(a.name)}を消す">✕</button></td></tr>`).join("")}</table></div>
+    <div class="acts"><button class="btn sm" data-a="aadd">＋ 場所を追加</button></div>
+    <button class="btn primary" data-a="saveAreas" ${adm.dirtyA && !busy ? "" : "disabled"}>掃除当番を保存</button></div>
+
+  <form class="panel" id="cfgForm"><h2>通知のタイミング</h2>
+    <div class="row"><div class="field"><label for="cEsc">責任者に知らせるまで（分）</label><input id="cEsc" type="number" min="5" max="240" value="${esc(adm.escMin)}"></div>
+    <div class="field"><label for="cSum">社長への朝のまとめ</label><input id="cSum" type="time" value="${esc(adm.summaryTime)}"></div></div>
+    <div class="row"><div class="field"><label for="cPin">暗証番号を変える（任意）</label><input id="cPin" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="数字4けた"></div>
+    <div class="field"><label for="cCode">合言葉を変える（任意）</label><input id="cCode" autocomplete="off" placeholder="変えると全員入り直し"></div></div>
+    <button class="btn primary">保存</button></form>`;
+}
+
+/* ---------- 全体の描画 ---------- */
+const ICON = {
+  mine:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
+  all:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
+  clean:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-3 9"/><path d="M6 13h10l1.5 8h-13z"/><path d="M9 17v4M13 17v4"/></svg>',
+  admin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>'
+};
+function render() {
+  const app = $("#app"), tabs = $("#tabs"), who = $("#who");
+  const keep = document.activeElement && document.activeElement.id && ["tWhat","newStaff"].includes(document.activeElement.id) ? { id: document.activeElement.id, v: document.activeElement.value } : null;
+  const tWhatVal = $("#tWhat") ? $("#tWhat").value : "";
+  if (!cfg.url || !cfg.code || !S) { tabs.hidden = true; who.textContent = ""; app.innerHTML = viewSetup(); return; }
+  if (!meObj()) { tabs.hidden = true; who.textContent = ""; app.innerHTML = viewPick(); return; }
+  who.innerHTML = `<b>${esc(meObj().name)}</b>さん`;
+  const now = Date.now();
+  const myLate = S.tasks.filter(t => !t.done && t.who === cfg.me && t.due < now).length + todayCleanFor(cfg.me).filter(a => !cleanLog(a.id) && now > cleanDeadline(a)).length;
+  const allLate = S.tasks.filter(t => !t.done && t.due < now).length;
+  const cleanLeft = S.areas.filter(a => a["d"+S.weekday] && !cleanLog(a.id)).length;
+  const T = [["mine","自分",myLate],["all","みんな",allLate],["clean","掃除",cleanLeft]].concat(isOwner() ? [["admin","管理",0]] : []);
+  if (tab === "admin" && !isOwner()) tab = "mine";
+  tabs.hidden = false;
+  tabs.innerHTML = T.map(([k,l,n]) => `<button data-tab="${k}" ${tab===k?'aria-current="page"':""}>${ICON[k]}${l}${n ? `<span class="dot">${n}</span>` : ""}</button>`).join("");
+  app.innerHTML = tab === "mine" ? viewMine() : tab === "all" ? viewAll() : tab === "clean" ? viewClean() : viewAdmin();
+  if ($("#tWhat") && tWhatVal) $("#tWhat").value = tWhatVal;
+  if (keep && $("#" + keep.id)) { const el = $("#" + keep.id); el.value = keep.v; el.focus(); }
+  if (flashId) { const el = document.getElementById("task-" + flashId); if (el) el.scrollIntoView({ block: "center" }); setTimeout(() => { flashId = ""; }, 3000); }
+}
+
+/* ---------- 操作 ---------- */
+document.addEventListener("click", async e => {
+  const tb = e.target.closest("[data-tab]");
+  if (tb) { tab = tb.dataset.tab; render(); window.scrollTo(0,0); return; }
+  const qb = e.target.closest("#quick button");
+  if (qb) { const d = new Date(); if (qb.dataset.h === "end") d.setHours(23,59,0,0); else d.setTime(d.getTime() + Number(qb.dataset.h)*3600e3); ui.due = localDT(d); $("#tDue").value = ui.due;
+    [...qb.parentNode.children].forEach(b => b.setAttribute("aria-pressed", b === qb)); return; }
+  const b = e.target.closest("[data-a]"); if (!b) return;
+  const a = b.dataset.a, id = b.dataset.id;
+  if (a === "setup") { ui.setup = b.dataset.v; render(); }
+  else if (a === "pick") { cfg.me = id; ls.set("genba", cfg); tab = "mine"; render(); swInit(); }
+  else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; render(); }
+  else if (a === "push") enablePush();
+  else if (a === "test") testPush();
+  else if (a === "done") act("doneTask", { id }, "おつかれさまです");
+  else if (a === "undo") act("undoTask", { id });
+  else if (a === "del") { if (b.dataset.sure) act("delTask", { id }, "消しました"); else { b.dataset.sure = "1"; b.textContent = "本当に消す"; b.classList.add("danger"); } }
+  else if (a === "cdone") act("cleanDone", { area: id }, "おつかれさまです");
+  else if (a === "cundo") act("cleanUndo", { area: id });
+  else if (a === "af") { ui.allFilter = b.dataset.v; render(); }
+  else if (a === "copy") { try { await navigator.clipboard.writeText(inviteText()); toast("コピーしました"); } catch(x) { toast("下のリンクを長押ししてコピーしてください", 4000); } }
+  else if (a === "sl" || a === "so") { const s = adm.staff.find(x => x.id === id); s[a === "sl" ? "leader" : "owner"] = !s[a === "sl" ? "leader" : "owner"]; adm.dirtyS = true; render(); }
+  else if (a === "sx") { if (b.dataset.sure) { adm.staff = adm.staff.filter(x => x.id !== id); adm.dirtyS = true; render(); } else { b.dataset.sure = "1"; b.textContent = "本当に外す"; b.style.color = "var(--red)"; } }
+  else if (a === "aadd") { adm.areas.push({ id:"a" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name:"", deadline:"06:00", days:["","","","","","",""] }); adm.dirtyA = true; render(); }
+  else if (a === "ax") { adm.areas.splice(Number(b.dataset.k), 1); adm.dirtyA = true; render(); }
+  else if (a === "saveStaff") adminSave("saveStaff", { staff: adm.staff }, "社員を保存しました");
+  else if (a === "saveAreas") adminSave("saveAreas", { areas: adm.areas }, "掃除当番を保存しました");
+});
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.dataset && el.dataset.ar !== undefined && adm) { const ar = adm.areas[Number(el.dataset.ar)]; if (el.dataset.d !== undefined) ar.days[Number(el.dataset.d)] = el.value; else ar[el.dataset.f] = el.value; adm.dirtyA = true;
+    const sv = document.querySelector('[data-a="saveAreas"]'); if (sv) sv.disabled = false; }
+  if (el.id === "tWho") ui.taskWho = el.value;
+  if (el.id === "tDue") { ui.due = el.value; document.querySelectorAll("#quick button").forEach(x => x.setAttribute("aria-pressed","false")); }
+});
+document.addEventListener("change", e => { if (e.target.dataset && e.target.dataset.d !== undefined) e.target.dispatchEvent(new Event("input", { bubbles: true })); });
+async function adminSave(action, body, msg) {
+  if (busy) return; busy = true; render();
+  try { await api(action, { pin, ...body }); adm = null; toast(msg); }
+  catch(e) { toast(e.message, 5000); if (/暗証番号/.test(e.message)) { pin = ""; ss.set("genba-pin", ""); } }
+  busy = false; render();
+}
+document.addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target;
+  const mark = (ids) => { let bad = false; ids.forEach(id => { const el = $("#" + id); const ng = !el.value.trim(); el.classList.toggle("bad", ng); bad = bad || ng; }); return bad; };
+  if (f.id === "taskForm") {
+    if (mark(["tWhat","tDue"])) { toast("「何を」と「何時まで」を入れてください", 3500); return; }
+    const due = new Date($("#tDue").value).getTime();
+    const what = $("#tWhat").value.trim(), who = $("#tWho").value;
+    if (busy) return; busy = true;
+    try { await api("addTask", { what, who, due, by: cfg.me }); ui.due = ""; ui.taskWho = ""; $("#tWhat").value = ""; toast(who === cfg.me ? "登録しました" : nm(who) + "さんに知らせました"); }
+    catch(x) { toast(x.message, 5000); }
+    busy = false; render();
+  }
+  else if (f.id === "initForm") {
+    if (mark(["iUrl","iCode","iName","iPin"])) return;
+    const url = $("#iUrl").value.trim(), code = $("#iCode").value.trim(), pin_ = $("#iPin").value.trim(), name = $("#iName").value.trim();
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { $("#iUrl").classList.add("bad"); toast("URLは https://script.google.com/… で始まり /exec で終わるものです", 5000); return; }
+    if (code.length < 4) { $("#iCode").classList.add("bad"); toast("合言葉は4文字以上にしてください"); return; }
+    if (!/^\d{4}$/.test(pin_)) { $("#iPin").classList.add("bad"); toast("暗証番号は数字4けたです"); return; }
+    busy = true; render();
+    try {
+      cfg = { url, code };
+      const r = await api("init", { pin: pin_, name }, url);
+      cfg.me = r.ownerId; ls.set("genba", cfg); pin = pin_; ss.set("genba-pin", pin_); tab = "admin";
+      toast(r.trigger ? "初期設定ができました" : "初期設定はできましたが、自動チェックの登録に失敗しました。手順書の「自動チェックが動かない時」を見てください", 7000);
+      swInit();
+    } catch(x) { cfg = {}; toast(x.message, 6000); }
+    busy = false; render();
+  }
+  else if (f.id === "joinForm") {
+    if (mark(["jUrl","jCode"])) return;
+    join($("#jUrl").value.trim(), $("#jCode").value.trim());
+  }
+  else if (f.id === "pinForm") {
+    const p = $("#pinIn").value.trim(); if (!p) return;
+    busy = true; render();
+    try { await api("adminCheck", { pin: p }); pin = p; ss.set("genba-pin", p); adm = null; } catch(x) { toast(x.message, 4000); }
+    busy = false; render();
+  }
+  else if (f.id === "staffAdd") {
+    const n = $("#newStaff").value.trim(); if (!n) return;
+    adm.staff.push({ id:"s" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), name:n, leader:false, owner:false, active:true }); adm.dirtyS = true; $("#newStaff").value = ""; render(); $("#newStaff").focus();
+  }
+  else if (f.id === "cfgForm") {
+    const body = { escMin: Number($("#cEsc").value), summaryTime: $("#cSum").value, newPin: $("#cPin").value.trim(), newCode: $("#cCode").value.trim() };
+    if (body.newPin && !/^\d{4}$/.test(body.newPin)) { toast("暗証番号は数字4けたです"); return; }
+    if (body.newCode && body.newCode.length < 4) { toast("合言葉は4文字以上にしてください"); return; }
+    await adminSave("saveConfig", body, "保存しました");
+    if (body.newPin) { pin = body.newPin; ss.set("genba-pin", pin); }
+    if (body.newCode) { cfg.code = body.newCode; ls.set("genba", cfg); toast("合言葉を変えました。社員には新しい招待リンクを送ってください", 6000); }
+  }
+});
+async function join(url, code) {
+  busy = true; render();
+  const prev = cfg;
+  try { cfg = { url, code }; await api("state"); ls.set("genba", cfg); }
+  catch(x) { cfg = prev.url ? prev : {}; S = null; toast(x.message, 6000); }
+  busy = false; render();
+}
+
+/* ---------- 起動 ---------- */
+function route() {
+  const h = location.hash;
+  if (h.startsWith("#task-")) { flashId = h.slice(6); const t = S && S.tasks.find(x => x.id === flashId); tab = t && t.who !== cfg.me ? "all" : "mine"; if (t && tab === "all") ui.allFilter = "all"; }
+  else if (h === "#clean") tab = "clean";
+}
+(async function start() {
+  const m = location.hash.match(/^#j=([\w-]+)/);
+  if (m) {
+    try { const j = JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,"+").replace(/_/g,"/"))))); history.replaceState(null, "", location.pathname);
+      if (j.u !== cfg.url || j.c !== cfg.code) { await join(j.u, j.c); } } catch(e) { toast("招待リンクが読めませんでした。もう一度開いてください", 5000); }
+  }
+  if (cfg.url) await refresh(false);
+  route(); render(); swInit();
+  window.addEventListener("hashchange", () => { route(); render(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
+  setInterval(() => { if (document.visibilityState === "visible" && !busy && !document.activeElement.matches("input,select")) refresh(true); }, 60000);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.url) { history.replaceState(null, "", new URL(ev.data.url).hash || location.pathname); route(); refresh(true); } });
+})();
+</script>
+</body>
+</html>
