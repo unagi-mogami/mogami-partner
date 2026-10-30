@@ -15,6 +15,8 @@
 3. claude.ai版を組み立てる：Artifact の read（path=index.html）でいまの claude.ai版を保存し、
    `python3 tools/build_claude.py <保存したファイル> <出力先>` → `BUILT`。
 4. 出力先にも `python3 tools/check.py <出力先>` → `CHECK_OK`。
+   社長の画面（実績・顧客カルテ・商品マスタ）は `python3 tools/check_owner.py <出力先>` → `CHECK_OK`。
+   セキュリティ：`MOGAMI_MASTER=… MOGAMI_PASS=… python3 tools/security.py --claude <出力先>` → `SEC_OK`。
 5. GitHub に push し、出力先を claude.ai版として publish（capabilities は省略して引き継ぐ）。
 6. `python3 tools/same.py <claude.ai版>` が `SAME` になることを確認。
 
