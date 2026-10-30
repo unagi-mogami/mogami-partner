@@ -596,7 +596,7 @@ const normQ = s => String(s??"").normalize("NFKC").toLowerCase().replace(/[ァ-�
 /* 漢字は読みでも探せるように（産地・よく使う品名だけ） */
 const READS = {"宮崎":"みやざき","鹿児島":"かごしま","静岡":"しずおか","浜名湖":"はまなこ","愛知":"あいち","三河":"みかわ","一色":"いっしき","三重":"みえ","徳島":"とくしま","高知":"こうち",
   "熊本":"くまもと","大分":"おおいた","中国":"ちゅうごく","広東":"かんとん","台湾":"たいわん","国産":"こくさん","県産":"けんさん","肝":"きも","串":"くし","山椒":"さんしょう","鯉":"こい",
-  "頭":"あたま","骨":"ほね","短冊":"たんざく","焼":"やき","冷凍":"れいとう","生":"なま","特大":"とくだい","小":"しょう","中":"ちゅう","大":"だい","運賃":"うんちん","付属品":"ふぞくひん","副産物":"ふくさんぶつ","活魚":"かつぎょ","艶鰻":"えんまん","和匠":"わしょう"};
+  "頭":"あたま","骨":"ほね","短冊":"たんざく","焼":"やき","冷凍":"れいとう","生":"なま","特大":"とくだい","小":"しょう","中":"ちゅう","大":"だい","運賃":"うんちん","付属品":"ふぞくひん","副産物":"ふくさんぶつ","活魚":"かつぎょ","艶鰻":"えんまん","和匠":"わしょう","豊橋":"とよはし","蒲焼":"かばやき","白焼":"しらやき","鰻":"うなぎ","漬":"づけ","加工":"かこう","早割":"はやわり"};
 function matchQ(q, ...fields){
   const t = normQ(q); if (!t) return true;
   const raw = fields.flat(Infinity).filter(x=>x!=null).join(" ");
@@ -1545,7 +1545,7 @@ function shrinkImg(file, max, q){
       URL.revokeObjectURL(u); ok(c.toDataURL("image/jpeg", q)); } catch(e){ ng(e); } };
     im.onerror = () => { URL.revokeObjectURL(u); ng(new Error("画像を読めません")); }; im.src = u; });
 }
-function blankProduct(){ return {img:"", name:"", origin:"", farm:"", sizes:[], fat:"", oil:"", skin:"", tareFit:"", flesh:"", cookKanto:"", cookKansai:"", cookOther:"", bySize:{}, cost:"", price:"", stock:"", weeklyCap:"", supply:"", quality:"", brand:"", luxury:"", uniform:"", yield:"", sakiYield:"", shiroYield:"", domestic:null, notes:"", photoId:"", demo:false}; }
+function blankProduct(){ return {img:"", name:"", origin:"", farm:"", sizes:[], codes:{}, fat:"", oil:"", skin:"", tareFit:"", flesh:"", cookKanto:"", cookKansai:"", cookOther:"", bySize:{}, cost:"", price:"", stock:"", weeklyCap:"", supply:"", quality:"", brand:"", luxury:"", uniform:"", yield:"", sakiYield:"", shiroYield:"", domestic:null, notes:"", photoId:"", demo:false}; }
 function productsView(){
   if (S.prodEdit) return productForm();
   if (S.exDraft) return h("div",{class:"stack"}, extrasEditor());
@@ -1567,17 +1567,18 @@ function productsView(){
   else wrap.append(h("details",{class:"x"}, h("summary",null,"推薦の配点（参照）"), weightsTable(false)));
   return wrap;
 }
-const prodHit = p => matchQ(S.prodQuery, p.name, p.origin, p.brand, p.sizes);
+const prodHit = p => matchQ(S.prodQuery, p.name, p.origin, p.brand, p.sizes, Object.values(p.codes||{}));
 function prodTable(){
   const list = S.products.filter(prodHit);
   if (S.products.length && !list.length) return h("p",{class:"muted",id:"prod-table"},"うなぎ：「"+S.prodQuery.trim()+"」に当てはまる商品はありません。");
   return h("div",{class:"tablewrap",id:"prod-table"}, h("table",{class:"t"},
-    h("tr",null, ["商品名","産地","サイズ","味","脂","皮","身質","タレ", can("costView")?"原価/kg":null, "販売単価（小口）","在庫","供給","品質",""].filter(x=>x!==null).map(x=>h("th",{class: /kg|単価/.test(x)?"num":null},x))),
+    h("tr",null, ["商品名","産地","サイズ","コード","味","脂","皮","身質","タレ", can("costView")?"原価/kg":null, "販売単価（小口）","在庫","供給","品質",""].filter(x=>x!==null).map(x=>h("th",{class: /kg|単価/.test(x)?"num":null},x))),
     list.map(p=>{ const [sl,sc]=supplyLabel(p); const unk = v => v===""||v==null ? h("span",{class:"pill warn"},"要確認") : v;
       return h("tr",null,
         h("td",null, h("b",null,p.name), p.demo ? h("div",null,h("span",{class:"pill demo"},"架空")) : null),
         h("td",null, unk(p.origin)),
         h("td",null, (p.sizes||[]).join("・") || unk("")),
+        h("td",{class:"small"}, codeList(p).length ? codeList(p).map(([z,c])=>h("div",{style:"white-space:nowrap"}, z+" ", h("b",null,c))) : h("span",{class:"muted"},"—")),
         h("td",null, isNum(p.fat)?lbl(FAT,p.fat):unk("")), h("td",null, isNum(p.oil)?lbl(OIL,p.oil):unk("")), h("td",null, isNum(p.skin)?lbl(SKIN,p.skin):unk("")), h("td",null, isNum(p.flesh)?lbl(FLESH,p.flesh):unk("")), h("td",null, p.tareFit==="any" ? "どれでも" : isNum(p.tareFit)?lbl(TARE,p.tareFit):unk("")),
         can("costView") ? h("td",{class:"num"}, (p.sizes||[]).length ? (p.sizes||[]).map(sz=>h("div",null, sz+" ", isNum(sizeCost(p,sz)) ? yen(sizeCost(p,sz)) : unk(""))) : unk("")) : null,
         h("td",{class:"num"}, (p.sizes||[]).length ? (p.sizes||[]).map(sz=>{ const q = sellQuote(p, sz, getPricing().tiers[0]); return h("div",null, sz+" ", q ? priceText(q) : unk("")); }) : unk("")),
@@ -1600,7 +1601,7 @@ function stockCell(p){
 function duplicateProduct(p){
   openProduct(p);
   S.prodEdit = "new"; S.dupFrom = p.name;
-  S.prodDraft.name = p.name + "（コピー）";
+  S.prodDraft.name = p.name + "（コピー）"; S.prodDraft.codes = {};
   toast("「"+p.name+"」の内容をコピーしました。名前と違う部分を直して登録してください");
 }
 function openProduct(p){
@@ -1609,6 +1610,7 @@ function openProduct(p){
   S.prodDraft = {...blankProduct(), ...p, sizes:[...(p.sizes||[])], cookKanto:p.cookFit?.kanto ?? "", cookKansai:p.cookFit?.kansai ?? "", cookOther:p.cookFit?.other ?? "",
     bySize: Object.fromEntries((p.sizes||[]).map(s=>[s, {cost: rawCost(p,s) ?? "", avail: sizeAvail(p,s)}]))};
   for (const k of ["fat","oil","skin","flesh","tareFit","cost","price","stock","weeklyCap","supply","quality","brand","luxury","uniform","yield","sakiYield","shiroYield"]) if (S.prodDraft[k]==null) S.prodDraft[k]="";
+  S.prodDraft.codes = {...(p.codes||{})};
   S.prodDraft.seasonYield = (p.seasonYield||[]).map(e=>({label:e.label||"", months:[...(e.months||[])], saki: e.saki ?? "", shiro: e.shiro ?? ""}));
   if (typeof S.prodDraft.domestic!=="boolean") S.prodDraft.domestic = domesticOf(p)===1 ? true : domesticOf(p)===0 ? false : null;
   render(); window.scrollTo(0,0);
@@ -1690,6 +1692,7 @@ function productForm(){
         d.sizes.length>1 ? h("button",{type:"button", class:"linkbtn", style:"align-self:flex-start", onclick:()=>{ const c = d.bySize[d.sizes[0]].cost; d.sizes.forEach(s=>{ d.bySize[s].cost = c; }); render(); }}, d.sizes[0]+"の原価を全サイズにコピー") : null,
         pricePreview(d)) : h("p",{class:"small muted",style:"margin:0"},"先にサイズ規格を選んでください。"),
       h("span",{class:"hint"},"販売単価は「サイズ別の原価 ＋ 発注量に応じた上乗せ」で自動計算します")),
+    codeEditor(d),
     h("div",{class:"grid2"}, field("味（淡白〜濃い）", scale("fat",FAT,FAT_S)), field("脂の強さ（少なめ〜多め）", scale("oil",OIL,OIL_S)), field("皮（薄め〜厚め）", scale("skin",SKIN,SKIN_S)), field("身質（ふっくら〜筋肉質）", scale("flesh",FLESH,FLESH_S)), field("相性の良いタレ（辛め〜かなり甘め）", tareCtl(d))),
     h("div",{class:"grid2"}, field("関東風との適合", five("cookKanto")), field("関西風との適合", five("cookKansai")), field("その他調理との適合", five("cookOther"))),
     h("div",{class:"grid2"}, field("納品可能数量（kg/週）", n("weeklyCap","例：80"), "全サイズ合計で、週に出せる量")),
@@ -1723,7 +1726,8 @@ async function saveProduct(){
     price:toNum(d.price), weeklyCap:toNum(d.weeklyCap), supply:toNum(d.supply), quality:toNum(d.quality),
     brand:toNum(d.brand), luxury:toNum(d.luxury), uniform:toNum(d.uniform), yield:toNum(d.yield), sakiYield:toNum(d.sakiYield), shiroYield:toNum(d.shiroYield),
     seasonYield:(d.seasonYield||[]).filter(e=>(e.months||[]).length && (isNum(e.saki)||isNum(e.shiro))).map(e=>({label:(e.label||"").trim(), months:[...e.months].map(Number).sort((a,b)=>a-b), saki:toNum(e.saki), shiro:toNum(e.shiro)})), domestic: typeof d.domestic==="boolean" ? d.domestic : null,
-    notes:(d.notes||"").trim(), photoId:d.photoId||"", img:d.img||"", demo:!!d.demo, v:2, updatedAt:nowIso(), updatedBy:S.uid
+    notes:(d.notes||"").trim(), photoId:d.photoId||"", img:d.img||"", demo:!!d.demo, v:2, updatedAt:nowIso(), updatedBy:S.uid,
+    codes:Object.fromEntries(Object.entries(d.codes||{}).map(([k,v])=>[k, cleanCode(v)]).filter(([,v])=>v))
   };
   const ref = S.prodEdit==="new" ? S.db.collection("products").doc() : S.db.doc("products/"+S.prodEdit);
   if (await write(()=>ref.set(body), "保存しました")){ S.prodEdit=null; S.prodDraft=null; S.dupFrom=null; render(); }
@@ -2258,10 +2262,10 @@ function buildSnapshot(){
       sakiYield:p.sakiYield??null, shiroYield:p.shiroYield??null, seasonYield:p.seasonYield||[], weeklyCap:p.weeklyCap??null, v:2,
       bySize:Object.fromEntries(sizes.map(s=>[s,{avail:sizeAvail(p,s)}])),
       _sell:Object.fromEntries(sizes.map(s=>[s, T.map(t=>{ const q = quote(sizeCost(p,s), t); return q ? {lo:q.lo, hi:q.hi} : null; })])),
-      ...(p.img ? {img:p.img} : {})};
+      ...(p.img ? {img:p.img} : {}), ...(codeList(p).length ? {codes:Object.fromEntries(codeList(p))} : {})};
   });
   const P = getPricing();
-  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax, cat:extraCat(x)})), ship:getShip()},
+  return {v:1, products, pricing:{maxKg:P.maxKg, tiers:P.tiers.map(t=>({from:t.from, to:t.to??null}))}, weights:getWeights(), extras:{items:getExtras().map(x=>({id:x.id, name:x.name, unit:x.unit, price:x.price, tax:x.tax, cat:extraCat(x), ...(x.code ? {code:String(x.code)} : {})})), ship:getShip()},
     ...(S.staffKey && Number(S.staffKey.v) > 1 && S.staffKey.salt && S.staffKey.hash ? {staffKey:{v:Number(S.staffKey.v), iter:Number(S.staffKey.iter), salt:S.staffKey.salt, hash:S.staffKey.hash}} : {})};
 }
 const snapKey = o => o ? JSON.stringify({...o, builtAt:undefined}) : "";
@@ -2796,6 +2800,15 @@ function recExtras(r, code){
   const bits = [];
   if (r.qty || r.react) bits.push(h("div",{class:"small"}, [r.qty ? "量："+r.qty : "", r.react ? "反応："+r.react : ""].filter(Boolean).join("　")));
   if (r.memo) bits.push(h("div",{class:"small",style:"white-space:pre-wrap;color:var(--ink-2)"}, r.memo));
+  /* 見積書の記録：明細（商品・数量・単価・金額）と合計を出し、ボタンで見積書そのものを開く（社長の実績・社員のみんなの記録で共通） */
+  if (r.kind==="quote" && r.quote && Array.isArray(r.quote.lines)){
+    const sq = r.quote, q1 = v => num(Number(v)||0, 2).replace(/\.?0+$/,"");
+    bits.push(h("div",{class:"stack",style:"gap:6px"},
+      h("div",{class:"small"}, (sq.kg ? "1回の量 約"+q1(sq.kg)+"kg" : "")+(sq.delivery && deliveryLabel(sq.delivery) ? "　納品："+deliveryLabel(sq.delivery) : "")+(sq.person ? "　ご担当："+sq.person : "")),
+      h("div",{class:"formula",style:"white-space:pre-wrap"}, sq.lines.map(l=>"・"+l.name+"　"+q1(l.qty)+(l.unit||"")+" × "+yen(l.up)+" ＝ "+yen(l.amount)).join("\n")
+        +"\n合計 "+yen(sq.total)+"（税込）"+(sq.memo ? "\n備考："+sq.memo : "")),
+      qtSnapView(r)));
+  }
   if (r.detail) bits.push(h("details",{class:"x"}, h("summary",null,"📎 "+(r.detailLabel || (r.kind==="diag" ? "診断結果" : r.kind==="quote" ? "見積の内容" : "添付した結果"))), h("div",{class:"formula",style:"white-space:pre-wrap"}, r.detail)));
   const ph = recPhotos(r, code); if (ph) bits.push(ph);
   return bits.length ? h("div",{class:"rx"}, bits) : null;
@@ -3144,14 +3157,16 @@ const resState = () => S.res || (S.res = {loading:false, loaded:false, err:"", s
 function recExtract(any){
   const strs = []; const walk = v => { if (typeof v==="string") strs.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v==="object") Object.values(v).forEach(walk); };
   walk(any);
-  const out = [];
-  for (let t of strs){
-    t = t.replace(/""/g, '"');
+  const out = [], seen = new Set();
+  /* CSVでは " が "" になっているので戻した版も試す。文章版（表）では "" は空の項目（"memo":""）なので、そのままの版を先に読む */
+  const texts = [];
+  for (const s0 of strs){ const t0 = s0.replace(/\\([\[\]_*])/g, "$1"); texts.push(t0); if (t0.includes('""')) texts.push(t0.replace(/""/g, '"')); }
+  for (const t of texts){
     let i = t.indexOf('{"v":1');
     while (i >= 0){
       let j = t.indexOf("}", i), got = null;
       for (let n = 0; j >= 0 && n < 60; n++, j = t.indexOf("}", j+1)){ try { const o = JSON.parse(t.slice(i, j+1)); if (o && o.v===1 && o.id){ got = o; break; } } catch(e){} }
-      if (got) out.push(got);
+      if (got && !seen.has(got.id+"|"+(got.editedAt||got.at||""))){ seen.add(got.id+"|"+(got.editedAt||got.at||"")); out.push(got); }
       i = t.indexOf('{"v":1', i+1);
     }
   }
@@ -3173,7 +3188,12 @@ async function resLoad(){
       try {
         const r = await mcp.callTool(REC_DRIVE, "download_file_content", {fileId: REC_SHEET_ID, exportMimeType: "text/csv"});
         const c = r?.payload?.content ?? r?.structuredContent?.content;
-        const got = recExtract(c ? b64txt(c) : r); X.sheetCount = got.length; recs.push(...got);
+        /* 返ってくる形が変わっても読めるように：base64を戻した文字列 → そのままの文字列 → 返事全体 の順に試す */
+        let got = c ? recExtract(b64txt(c)) : [];
+        if (!got.length && c) got = recExtract(String(c));
+        if (!got.length) got = recExtract(r);
+        if (!got.length) throw new Error("csv-empty");   // 0件なら文章版でもう一度読む
+        X.sheetCount = got.length; recs.push(...got);
       } catch(e){
         try { const r = await mcp.callTool(REC_DRIVE, "read_file_content", {fileId: REC_SHEET_ID}); const got = recExtract(r); X.sheetCount = got.length; recs.push(...got); }
         catch(e2){ notes.push(errMsg(e2)); }
@@ -3202,17 +3222,23 @@ async function resFixGp(){
   if (changed){ try { await S.db.collection("data/users/"+S.uid).doc("rec_gp").set({map}); X.gpDoc = {map}; } catch(e){ X.gpDoc = {map}; } }
 }
 const resStaff = () => resState().staffDoc?.list || {};
+/* 承認済みの社員の暗証番号：いまの番号（pin）に加えて、登録し直す前の番号（old）の記録も本人の記録として数える */
+const staffPins = e => e ? [String(e.pin), ...(Array.isArray(e.old) ? e.old.map(String) : [])] : [];
+const staffPinOk = (e, pin) => staffPins(e).includes(String(pin));
+const staffApprove = (prev, pin) => prev && String(prev.pin)!==String(pin) ? {pin:String(pin), old:[...new Set(staffPins(prev))].filter(x=>x!==String(pin)), at:nowIso()} : {pin:String(pin), ...(prev && prev.old ? {old:prev.old} : {}), at:nowIso()};
 function resValid(withExcluded){
   const X = resState(), list = resStaff(), ex = X.exclDoc?.ids || {};
-  const ok = r => r.uid ? true : (list[r.name] && String(list[r.name].pin)===String(r.pin));
+  const ok = r => r.uid ? true : staffPinOk(list[r.name], r.pin);
   const all = X.recs.filter(ok);
   const cancel = new Set(all.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref));
   const live0 = recLatest(all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+recRoot(r)) && (withExcluded || !(ex[r.id] || ex[recRoot(r)]))));
   /* 社員に引き継いだ社長名義の記録は、社員側の記録（承認済み）があれば数えない */
   const moved = new Set(live0.filter(r=>!r.uid && r.from).map(r=>r.from));
   const live = live0.filter(r=>!(r.uid && moved.has(r.id)));
-  const latest = {}; for (const r of live) if (r.kind==="quote" && r.quote?.no){ const k = r.quote.no; if (!latest[k] || String(r.at)>String(latest[k].at)) latest[k] = r; }
-  return live.filter(r=>!(r.kind==="quote" && r.quote?.no) || latest[r.quote.no]===r);
+  /* 同じ見積番号を直して送り直した時は新しい方だけ数える。番号が同じでも宛先のお店が違えば別の見積（新しい見積書を押し忘れた時） */
+  const qk = r => r.quote.no+"|"+String(r.quote.shop||"").trim();
+  const latest = {}; for (const r of live) if (r.kind==="quote" && r.quote?.no){ const k = qk(r); if (!latest[k] || String(r.at)>String(latest[k].at)) latest[k] = r; }
+  return live.filter(r=>!(r.kind==="quote" && r.quote?.no) || latest[qk(r)]===r);
 }
 /* 社員が出した見積書を、社長の画面で見る・PDFにする */
 function qtSnapDoc(r){
@@ -3442,7 +3468,7 @@ function resultsView(){
   /* 社員が「取り消す」を押した記録は数えない。社長が「消す」（または承認済みから「外す」）にした名前＋番号は、もう出さない */
   const cancelled = new Set(X.recs.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref)), dis = X.dismissDoc?.keys || {};
   const pend = {}, hidden = {};
-  for (const r of X.recs) if (!r.uid && !r.edit && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !(list[r.name] && String(list[r.name].pin)===String(r.pin))){
+  for (const r of X.recs) if (!r.uid && !r.edit && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !staffPinOk(list[r.name], r.pin)){
     const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend; (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
   const pends = Object.values(pend), hiddens = Object.values(hidden);
   const per = [["month","今月"],["last","先月"],["year","今年"],["all","全期間"]];
@@ -3468,8 +3494,8 @@ function resultsView(){
       h("p",{class:"small muted",style:"margin:0"},"独立版の記録は、名前と暗証番号を承認するまで集計に入りません。知らない名前やテストの記録は承認せず「記録ごと消す」を押してください（社員の「みんなの記録」からも消えます）。"),
       h("div",{class:"log"}, pends.length ? pends.map(x=>h("div",{class:"e"},
         h("div",null, h("b",null,x.name), "　記録 "+x.n+" 件", x.known ? h("span",{class:"pill bad",style:"margin-left:6px"},"登録済みの番号と違う") : null),
-        h("div",{class:"row"}, x.known ? h("span",{class:"small muted"},"本人が番号を打ち間違えた場合は「この番号で承認」で上書きできます。") : null,
-          h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:{pin:String(x.pin), at:nowIso()}})}, x.known ? "この番号で承認" : "社員として承認"),
+        h("div",{class:"row"}, x.known ? h("span",{class:"small muted"},"登録し直して番号が変わった時は「この番号で承認」を押してください（前の番号の記録も、そのまま本人の実績に残ります）。") : null,
+          h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:staffApprove(list[x.name], x.pin)})}, x.known ? "この番号で承認" : "社員として承認"),
           deleteControl("pd:"+x.k, "記録ごと消す", async ()=>{ if (await resDeleteMany(X.recs.filter(r=>!r.uid && r.kind!=="cancel" && r.name+"|"+r.pin===x.k))) resDismiss(x.k, true); })))) : h("div",{class:"empty"},"ありません。")),
       hiddens.length ? h("details",{class:"x"}, h("summary",null,"消した承認待ち（"+hiddens.length+"件）"),
         h("div",{class:"log"}, hiddens.map(x=>h("div",{class:"e"}, h("div",{class:"row"}, h("span",{style:"flex:1"}, h("b",null,x.name), "　記録 "+x.n+" 件"),
@@ -3477,7 +3503,7 @@ function resultsView(){
     h("section",{class:"sec"}, h("h2",null,"承認済みの社員", h("span",{class:"c"}, Object.keys(list).length+"人")),
       h("div",{class:"log"}, Object.keys(list).length ? Object.keys(list).sort((a,b)=>a.localeCompare(b,"ja")).map(n=>h("div",{class:"e"},
         h("div",{class:"row"}, h("b",{style:"flex:1"},n), h("span",{class:"small muted"},"暗証番号 ••••"),
-          deleteControl("rs:"+n, "外す", async ()=>{ const pin = list[n]?.pin; const l = {...list}; delete l[n]; await resSaveStaff(l); if (pin!=null) await resDismiss(n+"|"+pin, true); })))) : h("div",{class:"empty"},"まだいません。社員が独立版で記録すると、上の「承認待ち」に出ます。"))));
+          deleteControl("rs:"+n, "外す", async ()=>{ const pins = staffPins(list[n]); const l = {...list}; delete l[n]; await resSaveStaff(l); for (const pin of pins) await resDismiss(n+"|"+pin, true); })))) : h("div",{class:"empty"},"まだいません。社員が独立版で記録すると、上の「承認待ち」に出ます。"))));
 }
 
 
@@ -3629,10 +3655,88 @@ const SHIP_DEFAULT = {name:"運賃", unit:"個口", price:1700, tax:10, underKg:
 /* 納品方法。運賃は「宅配」を使う時だけ（さらに活鰻が5kg未満の時） */
 const DELIVERY = [["own","もがみの配送"],["takuhai","宅配便"],["pickup","店頭引き取り"]];
 const deliveryLabel = k => (DELIVERY.find(x=>x[0]===k)||[,""])[1];
-const EXTRA_CATS = ["付属品","副産物","活魚","その他"];
+const EXTRA_CATS = ["付属品","副産物","活魚","うなぎ・加工品","加工賃","食品","その他"];
 const extraCat = x => EXTRA_CATS.includes(x.cat) ? x.cat : "その他";
 function getExtras(){ const x = S.extras?.items || PUB?.extras?.items; return Array.isArray(x) && x.length ? x : EXTRAS_DEFAULT; }
 function getShip(){ return {...SHIP_DEFAULT, ...(S.extras?.ship || PUB?.extras?.ship || {})}; }
+/* ============ 商品コード ============ */
+/* 販売管理の商品コードと同じ番号。うなぎは商品×サイズごと（products の codes：{"4P":"0074"}）、うなぎ以外は品目ごと（extras の code）。
+   同じコードを複数の商品で使ってよい（例：三河産のオスと艶鰻、肝焼きの小と中）。入れた時に、どれにするかタブで選ぶ。
+   1〜3桁の数字は頭に0を足して4桁として探す（74 → 0074）。小数のコード（73.5 など）はそのまま */
+const CODE_SIZES = ["2P","2.5P","3P","3.5P","4P","4.5P","5P","5.5P","6P","6.5P","7P"];
+const cleanCode = v => String(v??"").normalize("NFKC").replace(/\s+/g,"").trim();
+const normPcode = v => { const t = cleanCode(v); return /^\d{1,3}$/.test(t) ? t.padStart(4,"0") : t; };
+/* 加工はうなぎの行で選ぶので、コードで入れた時はいちばん下のうなぎの加工を切り替える */
+const PROC_CODES = {"0030":"hiraki","0040":"kushi","0050":"shiro"};
+const codeList = p => Object.entries(p?.codes||{}).filter(([,c])=>cleanCode(c)).sort((a,b)=>pOf(a[0])-pOf(b[0]));
+const eelCode = (p, size) => p && size ? cleanCode((p.codes||{})[size]) : "";
+function findCode(v){
+  const k = normPcode(v); if (!k) return [];
+  const out = [];
+  for (const p of S.products||[]) for (const [z,c] of codeList(p)) if (normPcode(c)===k) out.push({type:"eel", name:p.name, size:z, ok:(p.sizes||[]).includes(z), code:cleanCode(c)});
+  for (const x of getExtras()) if (x.code && normPcode(x.code)===k) out.push({type:"extra", eid:x.id, name:x.name, unit:x.unit, price:x.price, code:cleanCode(x.code)});
+  if (PROC_CODES[k]) out.push({type:"proc", kind:PROC_CODES[k], name:procOf(PROC_CODES[k])[1], code:k});
+  const SH = getShip(); if (SH.code && normPcode(SH.code)===k) out.push({type:"ship", name:SH.name, code:cleanCode(SH.code)});
+  return out;
+}
+const codeHitLabel = t => t.type==="eel" ? t.name+" "+t.size : t.name;
+/* 商品の登録・編集：サイズごとのコード */
+function codeEditor(d){
+  if (!d.codes) d.codes = {};
+  const shown = CODE_SIZES.filter(z=>d.sizes.includes(z) || cleanCode(d.codes[z]));
+  return h("div",{class:"f"}, h("span",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"商品コード（サイズごと）"),
+    h("span",{class:"hint"},"見積書の「コードで入れる」で使います。ほかの商品と同じコードでも構いません（入れた時にどちらか選べます）。"),
+    shown.length ? h("div",{class:"grid2",style:"grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px"},
+      shown.map(z=>h("label",{class:"f"}, z+(d.sizes.includes(z) ? "" : "（取扱サイズ外）"), h("input",{class:"i", id:"p-code-"+z, inputmode:"decimal", autocomplete:"off", placeholder:"例：0074", value:d.codes[z]??"", oninput:e=>{ d.codes[z] = e.target.value; }})))) :
+      h("p",{class:"small muted",style:"margin:0"},"先にサイズ規格を選んでください。"));
+}
+/* 見積書：コードで入れる */
+function qtCodeBox(q, upd){
+  const st = S.qtCode || (S.qtCode = {v:""});
+  const lastEel = () => [...q.items].reverse().find(x=>x.product);
+  const put = t => {
+    if (t.type==="ship"){ toast("運賃は、納品方法で「宅配便」を選ぶと自動でつきます"); return; }
+    if (t.type==="eel" && !t.ok){ toast(t.name+" の "+t.size+" は、商品マスタの取扱サイズに入っていません"); return; }
+    if (t.type==="proc" && !lastEel()){ toast("先にうなぎを入れてから、加工のコードを入れてください"); return; }
+    st.v = "";
+    upd(()=>{
+      if (t.type==="eel"){
+        let it = q.items.find(x=>!x.product);
+        if (!it){ it = {id:rid(), product:"", size:"", kind:"live", qty:"", price:""}; q.items.push(it); }
+        it.product = t.name; it.size = t.size; it.price = "";
+        toast(t.name+" "+t.size+" を入れました。数量を入れてください");
+      } else if (t.type==="extra"){
+        if (!q.extras) q.extras = [];
+        let it = q.extras.find(x=>!x.eid);
+        if (!it){ it = {id:rid(), eid:"", qty:"", price:""}; q.extras.push(it); }
+        it.eid = t.eid; it.price = "";
+        toast(t.name+" を入れました。数量を入れてください");
+      } else if (t.type==="proc"){
+        const it = lastEel(); if ((it.kind==="shiro") !== (t.kind==="shiro")) it.qty = "";
+        it.kind = t.kind; toast(it.product+" "+(it.size||"")+" を「"+t.name+"」にしました");
+      }
+    });
+  };
+  const hint = h("div",{class:"stack",style:"gap:8px"});
+  const fill = () => {
+    const v = st.v.trim(), hits = v ? findCode(v) : [];
+    if (!v){ hint.replaceChildren(h("span",{class:"qhint"},"例：0074（4桁の数字は頭の0を省いてもOK）")); return; }
+    if (!hits.length){ hint.replaceChildren(h("span",{class:"qhint bad"},"コード「"+v+"」の商品はありません")); return; }
+    if (hits.length===1){ hint.replaceChildren(h("span",{class:"qhint"}, "→ ", h("b",null, codeHitLabel(hits[0])), "（「入れる」で追加）")); return; }
+    hint.replaceChildren(h("span",{class:"qhint"},"このコードの商品が"+hits.length+"つあります。入れる商品を選んでください"),
+      h("div",{class:"seg", role:"tablist", "aria-label":"コード "+v+" の商品", style:"grid-template-columns:repeat("+Math.min(hits.length,3)+",minmax(0,1fr))"},
+        hits.map(t=>h("button",{type:"button", role:"tab", "aria-selected":"false", onclick:()=>put(t)}, h("b",{style:"font-size:14px"}, t.type==="eel" ? t.name : t.name), h("small",null, t.type==="eel" ? t.size : t.type==="extra" ? (Number(t.price)>0 ? yen(t.price)+"/"+t.unit : "時価") : "")))));
+  };
+  const go1 = () => { const hits = st.v.trim() ? findCode(st.v) : []; if (hits.length===1) put(hits[0]); else if (!hits.length) toast(st.v.trim() ? "コード「"+st.v.trim()+"」の商品はありません" : "コードを入れてください"); else toast("下のタブから、入れる商品を選んでください"); };
+  fill();
+  return h("section",{class:"panel stack"},
+    h("b",null,"コードで入れる"),
+    h("div",{class:"row",style:"flex-wrap:nowrap"},
+      h("input",{class:"i", id:"qt-code", inputmode:"decimal", enterkeyhint:"done", autocomplete:"off", placeholder:"商品コード", value:st.v, style:"flex:1;min-width:0",
+        oninput:e=>{ st.v = e.target.value; fill(); }, onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); go1(); } }}),
+      h("button",{class:"btn primary", type:"button", onclick:go1},"入れる")),
+    hint);
+}
 const APR_PUB = {"kty":"EC","crv":"P-256","x":"sMi7nWiu58UqoINm7LvgmfS8UkDpQuwVhptO1m21k3M","y":"oWWI6_kS2O89rCIFCxs5UXex4xEm8Jqwsnrzm63LPqI"};
 const QT_DRAFT = "mogami.qt.draft", QT_SAVED = "mogami.qt.saved", QT_APR = "mogami.qt.apr";
 const b64uEnc = u8 => { let s = ""; u8.forEach(b=>{ s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
@@ -3672,6 +3776,7 @@ function qtCalc(q){
   for (const it of (q.extras||[])){
     const m = EX.find(x=>x.id===it.eid);
     if (!m || !isNum(it.qty) || Number(it.qty)<=0){ if (it.eid || it.qty) missing++; continue; }
+    if (!(Number(m.price)>0) && !isNum(it.price)){ missing++; continue; }   // 標準価格のない品目（時価）は単価を入れる
     const price = isNum(it.price) ? Number(it.price) : Number(m.price), n = Number(it.qty), amt = Math.round(price*n), rt = Number(m.tax)===8 ? 8 : 10;
     if (price < Number(m.price)) disc.push({product:m.name, size:"-", kind:"extra", price, rule:Number(m.price)});
     lines.push({name:m.name, qty:n, unit:m.unit, up:price, amount:amt, rate:rt+"%"});
@@ -3777,12 +3882,15 @@ function qtRecord(q){
   if (!recMe()) return;
   const snap = qtSnap(q), sig = JSON.stringify(snap);
   if (q.sentSig===sig) return;            // 同じ内容は二重に送らない
-  q.sentSig = sig; q.recorded = true; qtSave();
+  q.sentSig = sig; q.recorded = true; q.sentShop = snap.shop; qtSave();
   recAdd({kind:"quote", shop:snap.shop, quote:snap});
 }
 function quoteView(){
   if (!recMe()) return recRegisterView(true);
-  const q = qtGet(), c = qtCalc(q), appr = qtApproval(q, c), me = recMe();
+  const q = qtGet();
+  /* 送った後に宛先のお店を変えたら、別の見積として新しい見積番号にする（PDF・LINE・営業記録の番号がそろうよう、作る前に変える） */
+  if (q.recorded && q.sentShop && q.shop.trim() && q.sentShop!==q.shop.trim()){ q.no = qtNo(); q.date = today(); q.recorded = false; q.sentShop = ""; q.sentSig = ""; qtSave(); }
+  const c = qtCalc(q), appr = qtApproval(q, c), me = recMe();
   const upd = (fn, rr) => { fn(); qtSave(); if (rr!==false) render(); };
   const prods = (S.products||[]).filter(p=>p.sizes && p.sizes.length);
   const blocked = (appr.need && !appr.ok) || !!S.newVersion;
@@ -3794,9 +3902,9 @@ function quoteView(){
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"商品 "+(i+1)), q.items.length > 1 ? h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.items = q.items.filter(x=>x.id!==it.id); })},"この商品を消す") : null),
       field("商品", searchPick({id:"qt-"+it.id+"-product", value:it.product, placeholder:"商品名・産地で検索（例：かぐや、宮崎）",
-        items:prods.map(x=>({v:x.name, l:x.name, k:[x.origin, x.brand, x.sizes]})),
+        items:prods.map(x=>({v:x.name, l:x.name, k:[x.origin, x.brand, x.sizes, Object.values(x.codes||{})]})),
         onPick:v=>upd(()=>{ if (it.product!==v){ it.product = v; it.size = ""; it.price = ""; } })})),
-      p ? field("サイズ", h("select",{class:"i", onchange:e=>upd(()=>{ it.size = e.target.value; it.price = ""; })}, [["","選んでください"], ...p.sizes.map(z=>[z,z])].map(([v,l])=>h("option",{value:v, selected:it.size===v}, l)))) : null,
+      p ? field("サイズ", h("select",{class:"i", onchange:e=>upd(()=>{ it.size = e.target.value; it.price = ""; })}, [["","選んでください"], ...p.sizes.map(z=>[z, z+(eelCode(p,z) ? "（"+eelCode(p,z)+"）" : "")])].map(([v,l])=>h("option",{value:v, selected:it.size===v}, l))), eelCode(p, it.size) ? "商品コード "+eelCode(p, it.size) : null) : null,
       h("div",{class:"seg c4", role:"radiogroup","aria-label":"加工"}, PROC.map(([k,l,f])=>h("button",{type:"button", role:"radio","aria-checked":String(it.kind===k), onclick:()=>upd(()=>{ it.kind = k; it.qty = ""; })}, h("b",{style:"font-size:14px"}, l.replace("加工","")), h("small",null, f ? "＋"+yen(f)+"/kg" : "加工なし")))),
       h("div",{class:"grid2"},
         field(it.kind==="shiro" ? "枚数" : "数量（活鰻kg）", inp("qty", it.kind==="shiro" ? "例：40" : "例：10", it.kind==="shiro" ? "numeric" : "decimal"),
@@ -3813,6 +3921,7 @@ function quoteView(){
       h("div",{class:"grid2"},
         field("お店の名前（宛名）", h("input",{class:"i shopname", id:"qt-shop", placeholder:"例：うなぎ処 ○○", value:q.shop, oninput:e=>{ q.shop = e.target.value; qtSave(); }, onchange:()=>render()})),
         field("ご担当者（任意）", h("input",{class:"i", id:"qt-person", placeholder:"例：店主 ○○", value:q.person, oninput:e=>{ q.person = e.target.value; qtSave(); }, onchange:()=>render()})))),
+    qtCodeBox(q, upd),
     items,
     h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.items.push({id:rid(), product:"", size:"", kind:"live", qty:"", price:""}); })},"＋ うなぎを追加")),
     qtExtrasEditor(q, c, upd),
@@ -3850,16 +3959,16 @@ function qtExtrasEditor(q, c, upd){
   if (!q.extras) q.extras = [];
   const EX = getExtras(), SH = getShip();
   const rows = q.extras.map((it, i)=>{
-    const m = EX.find(x=>x.id===it.eid), price = isNum(it.price) ? Number(it.price) : (m ? Number(m.price) : null), low = m && price!=null && price < Number(m.price);
+    const m = EX.find(x=>x.id===it.eid), noStd = m && !(Number(m.price)>0), price = isNum(it.price) ? Number(it.price) : (m && !noStd ? Number(m.price) : null), low = m && price!=null && price < Number(m.price);
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qx-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"うなぎ以外 "+(i+1)), h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.extras = q.extras.filter(x=>x.id!==it.id); })},"消す")),
       field("品目", searchPick({id:"qx-"+it.id+"-eid", value:it.eid, placeholder:"品名・区分で検索（例：肝、串、山椒）",
-        items:EXTRA_CATS.flatMap(cg=>EX.filter(x=>extraCat(x)===cg).map(x=>({v:x.id, l:x.name+"（"+yen(x.price)+"/"+x.unit+"・"+x.tax+"%）", g:cg}))),
+        items:EXTRA_CATS.flatMap(cg=>EX.filter(x=>extraCat(x)===cg).map(x=>({v:x.id, l:(x.code ? "["+x.code+"] " : "")+x.name+"（"+(Number(x.price)>0 ? yen(x.price) : "時価")+"/"+x.unit+"・"+x.tax+"%）", g:cg, k:[x.code]}))),
         onPick:v=>upd(()=>{ if (it.eid!==v){ it.eid = v; it.price = ""; } })})),
       m ? h("div",{class:"grid2"},
         field("数量（"+m.unit+"）", inp("qty", "例：1")),
-        field("単価（円/"+m.unit+"・税抜）", inp("price", String(m.price), "numeric"), h("span",{class:"qhint"+(low ? " bad" : "")}, low ? "標準 "+yen(m.price)+" より安いので、社長の承認が必要です" : "標準 "+yen(m.price)+"。空欄なら標準の単価"))) : null);
+        field("単価（円/"+m.unit+"・税抜）", inp("price", noStd ? "単価を入れてください" : String(m.price), "numeric"), h("span",{class:"qhint"+(low || (noStd && !isNum(it.price)) ? " bad" : "")}, noStd ? "標準価格のない品目（時価）です。単価を入れてください" : low ? "標準 "+yen(m.price)+" より安いので、社長の承認が必要です" : "標準 "+yen(m.price)+"。空欄なら標準の単価"))) : null);
   });
   return [h("section",{class:"sec"}, h("h2",{style:"font-size:16px"},"うなぎ以外（山椒・どじょう・串など）"), rows,
       h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.extras.push({id:rid(), eid:"", qty:"", price:""}); })},"＋ うなぎ以外を追加"))),
@@ -3888,19 +3997,19 @@ function extrasMasterSection(){
 function exTable(){
   const EX = getExtras(), cost = S.extrasCost?.map || {}, showCost = can("costView");
   const mg = x => { const c = toNum(cost[x.id]); return c!=null && Number(x.price) > 0 ? (Number(x.price)-c)/Number(x.price)*100 : null; };
-  const list = EX.filter(x=>matchQ(S.prodQuery, x.name, extraCat(x), x.unit));
+  const list = EX.filter(x=>matchQ(S.prodQuery, x.name, extraCat(x), x.unit, x.code));
   if (!list.length) return h("p",{class:"muted",id:"ex-table"},"うなぎ以外：「"+String(S.prodQuery||"").trim()+"」に当てはまる商品はありません。");
   return h("div",{class:"tablewrap",id:"ex-table"}, h("table",{class:"t"},
-      h("tr",null, ["品名","区分","単位","販売単価","税率", showCost ? "原価" : null, showCost ? "粗利率" : null].filter(x=>x!==null).map((t,i)=>h("th",{class: i>=3 && t!=="税率" ? "num" : null}, t))),
-      EXTRA_CATS.flatMap(cg=>list.filter(x=>extraCat(x)===cg).map(x=>h("tr",null, h("td",null,h("b",null,x.name)), h("td",null,cg), h("td",null,x.unit), h("td",{class:"num"}, yen(x.price)), h("td",null, x.tax+"%"),
+      h("tr",null, ["コード","品名","区分","単位","販売単価","税率", showCost ? "原価" : null, showCost ? "粗利率" : null].filter(x=>x!==null).map((t,i)=>h("th",{class: i>=4 && t!=="税率" ? "num" : null}, t))),
+      EXTRA_CATS.flatMap(cg=>list.filter(x=>extraCat(x)===cg).map(x=>h("tr",null, h("td",null, x.code || h("span",{class:"muted"},"—")), h("td",null,h("b",null,x.name)), h("td",null,cg), h("td",null,x.unit), h("td",{class:"num"}, Number(x.price)>0 ? yen(x.price) : h("span",{class:"pill line"},"時価")), h("td",null, x.tax+"%"),
         showCost ? h("td",{class:"num"}, isNum(cost[x.id]) ? yen(cost[x.id]) : h("span",{class:"pill warn"},"未登録")) : null,
         showCost ? h("td",{class:"num"}, mg(x)==null ? "—" : h("span",{class:"pill "+(mg(x)>=getPricing().targetMargin ? "ok" : mg(x)>=getPricing().targetMargin*0.5 ? "warn" : "bad")}, num(mg(x),1)+"%")) : null)))));
 }
 function extrasEditor(){
   const E = S.exDraft, showCost = can("costView");
   const save = async () => {
-    const items = E.items.filter(x=>String(x.name||"").trim()).map(x=>({id:x.id||rid(), name:String(x.name).trim(), unit:String(x.unit||"").trim()||"個", price:toNum(x.price)??0, tax:Number(x.tax)===8 ? 8 : 10, cat:EXTRA_CATS.includes(x.cat) ? x.cat : "その他"}));
-    const ship = {name:"運賃", unit:"個口", price:toNum(E.ship.price)??0, tax:Number(E.ship.tax)===8 ? 8 : 10, underKg:toNum(E.ship.underKg)??5};
+    const items = E.items.filter(x=>String(x.name||"").trim()).map(x=>({id:x.id||rid(), name:String(x.name).trim(), unit:String(x.unit||"").trim()||"個", price:toNum(x.price)??0, tax:Number(x.tax)===8 ? 8 : 10, cat:EXTRA_CATS.includes(x.cat) ? x.cat : "その他", ...(cleanCode(x.code) ? {code:cleanCode(x.code)} : {})}));
+    const ship = {name:"運賃", unit:"個口", price:toNum(E.ship.price)??0, tax:Number(E.ship.tax)===8 ? 8 : 10, underKg:toNum(E.ship.underKg)??5, ...(cleanCode(E.ship.code) ? {code:cleanCode(E.ship.code)} : {})};
     const costMap = {}; for (const x of E.items) if (String(x.name||"").trim() && isNum(x.cost)) costMap[x.id] = Number(x.cost);
     const ok = await write(()=>S.db.doc("settings/extras").set({items, ship, updatedAt:nowIso(), updatedBy:S.uid}), null)
       && (!showCost || await write(()=>S.db.doc("settings/extras_cost").set({map:costMap, updatedAt:nowIso(), updatedBy:S.uid}), null));
@@ -3914,10 +4023,11 @@ function extrasEditor(){
       h("div",{class:"hd"}, h("b",null, x.name || "新しい商品"), h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>{ E.items.splice(i,1); render(); }},"消す")),
       h("div",{class:"grid2"},
         field("品名", cell(x,"name","text","例：肝吸いセット")), field("区分", sel2(x,"cat", EXTRA_CATS.map(c=>[c,c]))),
-        field("単位", cell(x,"unit","text","例：串・kg・P・束")), field("販売単価（円・税抜）", cell(x,"price","number")),
+        field("商品コード", cell(x,"code","text","例：0011"), "ほかの品目と同じコードでも構いません"),
+        field("単位", cell(x,"unit","text","例：串・kg・P・束")), field("販売単価（円・税抜）", cell(x,"price","number"), "0なら時価（見積書で毎回入れる）"),
         field("税率", sel2(x,"tax", [[8,"8%（食品）"],[10,"10%（食品以外）"]])),
         showCost ? field("原価（円・税抜・任意）", cell(x,"cost","number"), "値引きの承認で粗利率を見るのに使います") : null))),
-    h("div",null, h("button",{class:"btn", onclick:()=>{ E.items.push({id:rid(), name:"", unit:"", price:"", tax:8, cat:"その他", cost:""}); render(); }},"＋ 商品を追加")),
+    h("div",null, h("button",{class:"btn", onclick:()=>{ E.items.push({id:rid(), name:"", unit:"", price:"", tax:8, cat:"その他", code:"", cost:""}); render(); }},"＋ 商品を追加")),
     h("div",{class:"qitem"}, h("b",null,"運賃（宅配便のとき）"), h("div",{class:"grid2"},
       field("1個口の単価（円・税抜）", cell(E.ship,"price","number")), field("この量（活鰻kg）未満で運賃をつける", cell(E.ship,"underKg","number")),
       field("税率", sel2(E.ship,"tax", [[10,"10%"],[8,"8%"]])))),
