@@ -3670,8 +3670,12 @@ if (STANDALONE){
    白焼は1枚あたり＝（活鰻単価＋白焼加工賃）÷尾数を50円単位に切り上げ（税抜）。見積書では、うなぎ代(8%)と加工賃(10%)に分けて税を計算する。
    値引き（価格ルールの単価より安い）は、社長の承認が必要。承認は社長のアプリが署名したリンク／文章で届き、この端末で署名を確かめる。 */
 const CO = {name:"株式会社もがみ", zip:"〒277-0053", addr:"千葉県柏市酒井根397-3", tel:"04-7170-5605", fax:"04-7171-0910", inv:"T9040002095860"};
-const PROC = [["live","活鰻",0],["hiraki","開き加工",400],["kushi","串打ち加工",800],["shiro","白焼加工",1100]];
+/* [種類, 名前, 加工賃/kg, 早割の加工賃/kg]。早割は各うなぎの行で「早割」を選んだ時だけ */
+const PROC = [["live","活鰻",0,null],["hiraki","開き加工",400,300],["kushi","串打ち加工",800,600],["shiro","白焼加工",1100,900]];
 const procOf = k => PROC.find(x=>x[0]===k) || PROC[0];
+const procEarly = it => !!(it.early && procOf(it.kind)[3]!=null);
+const procFee = it => procEarly(it) ? procOf(it.kind)[3] : procOf(it.kind)[2];
+const procName = it => procOf(it.kind)[1]+(procEarly(it) ? "（早割）" : "");
 const QT_VALID_DAYS = 7;
 /* うなぎ以外の品目（付属品）。社長が claude.ai版の見積書タブで直すと settings/extras に入り、1日4回の自動更新で独立版にも届く */
 const EXTRAS_DEFAULT = [
@@ -3710,7 +3714,7 @@ const CODE_SIZES = ["2P","2.5P","3P","3.5P","4P","4.5P","5P","5.5P","6P","6.5P",
 const cleanCode = v => String(v??"").normalize("NFKC").replace(/\s+/g,"").trim();
 const normPcode = v => { const t = cleanCode(v); return /^\d{1,3}$/.test(t) ? t.padStart(4,"0") : t; };
 /* 加工はうなぎの行で選ぶので、コードで入れた時はいちばん下のうなぎの加工を切り替える */
-const PROC_CODES = {"0030":"hiraki","0040":"kushi","0050":"shiro"};
+const PROC_CODES = {"0030":{kind:"hiraki"},"0040":{kind:"kushi"},"0050":{kind:"shiro"},"0060":{kind:"hiraki",early:true},"0070":{kind:"kushi",early:true},"0080":{kind:"shiro",early:true}};
 const codeList = p => Object.entries(p?.codes||{}).filter(([,c])=>cleanCode(c)).sort((a,b)=>pOf(a[0])-pOf(b[0]));
 const eelCode = (p, size) => p && size ? cleanCode((p.codes||{})[size]) : "";
 function findCode(v){
@@ -3718,7 +3722,7 @@ function findCode(v){
   const out = [];
   for (const p of S.products||[]) for (const [z,c] of codeList(p)) if (normPcode(c)===k) out.push({type:"eel", name:p.name, size:z, ok:(p.sizes||[]).includes(z), code:cleanCode(c)});
   for (const x of getExtras()) if (x.code && normPcode(x.code)===k) out.push({type:"extra", eid:x.id, name:x.name, unit:x.unit, price:x.price, code:cleanCode(x.code)});
-  if (PROC_CODES[k]) out.push({type:"proc", kind:PROC_CODES[k], name:procOf(PROC_CODES[k])[1], code:k});
+  if (PROC_CODES[k]){ const pc = PROC_CODES[k]; out.push({type:"proc", kind:pc.kind, early:!!pc.early, name:procName(pc), code:k}); }
   const SH = getShip(); if (SH.code && normPcode(SH.code)===k) out.push({type:"ship", name:SH.name, code:cleanCode(SH.code)});
   return out;
 }
@@ -3757,7 +3761,7 @@ function qtCodeField(q, upd, side, row){
         toast(t.name+" を入れました"+(side==="extra" ? "" : "（うなぎ以外の欄）")+"。数量を入れてください");
       } else if (t.type==="proc"){
         if ((row.kind==="shiro") !== (t.kind==="shiro")) row.qty = "";
-        row.kind = t.kind; toast(row.product+" "+(row.size||"")+" を「"+t.name+"」にしました");
+        row.kind = t.kind; row.early = !!t.early; toast(row.product+" "+(row.size||"")+" を「"+t.name+"」にしました");
       }
     });
   };
@@ -3799,18 +3803,18 @@ function qtCalc(q){
   const tier = tierFor(totalKg) || getPricing().tiers[0];
   const lines = [], disc = []; let base8 = 0, base10 = 0, missing = 0;
   for (const it of q.items){
-    const P = pOf(it.size), kg = qtKg(it), rq = qtRule(it, tier), [k, label, fee] = procOf(it.kind);
+    const P = pOf(it.size), kg = qtKg(it), rq = qtRule(it, tier), k = procOf(it.kind)[0], label = procName(it), fee = procFee(it);
     const price = isNum(it.price) ? Number(it.price) : (rq ? rq.hi : null);
     if (!it.product || !it.size || !kg || price==null){ if (it.product || it.qty) missing++; continue; }
     if (rq && price < rq.lo) disc.push({product:it.product, size:it.size, kind:k, price, rule:rq.lo});
     const nm = it.product+" "+it.size;
     if (k==="shiro"){
       const per = ceil50((price+fee)/P), n = Number(it.qty), amt = per*n, eel = Math.round(price*kg), pc = amt-eel;
-      lines.push({name:nm+" 白焼", qty:n, unit:"枚", up:per, amount:amt, rate:"8%・10%", parts:[{l:"うち うなぎ代（活鰻 "+num(kg,2).replace(/\.?0+$/,"")+"kg × "+yen(price)+"）", amount:eel, rate:"8%"}, {l:"うち 白焼加工賃", amount:pc, rate:"10%"}]});
+      lines.push({name:nm+" 白焼", qty:n, unit:"枚", up:per, amount:amt, rate:"8%・10%", parts:[{l:"うち うなぎ代（活鰻 "+num(kg,2).replace(/\.?0+$/,"")+"kg × "+yen(price)+"）", amount:eel, rate:"8%"}, {l:"うち 白焼加工賃"+(procEarly(it) ? "（早割）" : ""), amount:pc, rate:"10%"}]});
       base8 += eel; base10 += pc;
     } else {
       const eel = Math.round(price*kg);
-      lines.push({name:nm+(k==="live" ? "（活鰻）" : "（"+label.replace("加工","")+"用）"), qty:kg, unit:"kg", up:price, amount:eel, rate:"8%"}); base8 += eel;
+      lines.push({name:nm+(k==="live" ? "（活鰻）" : "（"+procOf(it.kind)[1].replace("加工","")+"用）"), qty:kg, unit:"kg", up:price, amount:eel, rate:"8%"}); base8 += eel;
       if (fee){ const pa = Math.round(fee*kg); lines.push({name:label+"（"+nm+"）", qty:kg, unit:"kg", up:fee, amount:pa, rate:"10%"}); base10 += pa; }
     }
   }
@@ -3939,7 +3943,7 @@ function quoteView(){
   const blocked = (appr.need && !appr.ok) || !!S.newVersion;
   const ready = q.shop.trim() && c.lines.length && !c.missing && !c.noDelivery;
   const items = q.items.map((it, i)=>{
-    const p = prods.find(x=>x.name===it.product), rq = qtRule(it, c.tier), P = pOf(it.size), fee = procOf(it.kind)[2];
+    const p = prods.find(x=>x.name===it.product), rq = qtRule(it, c.tier), P = pOf(it.size), fee = procFee(it);
     const price = isNum(it.price) ? Number(it.price) : (rq ? rq.hi : null), low = rq && price!=null && price < rq.lo;
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qt-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
@@ -3949,7 +3953,11 @@ function quoteView(){
         items:prods.map(x=>({v:x.name, l:x.name, k:[x.origin, x.brand, x.sizes, Object.values(x.codes||{})]})),
         onPick:v=>upd(()=>{ if (it.product!==v){ it.product = v; it.size = ""; it.price = ""; } })})),
       p ? field("サイズ", h("select",{class:"i", onchange:e=>upd(()=>{ it.size = e.target.value; it.price = ""; })}, [["","選んでください"], ...p.sizes.map(z=>[z, z+(eelCode(p,z) ? "（"+eelCode(p,z)+"）" : "")])].map(([v,l])=>h("option",{value:v, selected:it.size===v}, l))), eelCode(p, it.size) ? "商品コード "+eelCode(p, it.size) : null) : null,
-      h("div",{class:"seg c4", role:"radiogroup","aria-label":"加工"}, PROC.map(([k,l,f])=>h("button",{type:"button", role:"radio","aria-checked":String(it.kind===k), onclick:()=>upd(()=>{ it.kind = k; it.qty = ""; })}, h("b",{style:"font-size:14px"}, l.replace("加工","")), h("small",null, f ? "＋"+yen(f)+"/kg" : "加工なし")))),
+      h("div",{class:"seg c4", role:"radiogroup","aria-label":"加工"}, PROC.map(([k,l,f])=>h("button",{type:"button", role:"radio","aria-checked":String(it.kind===k), onclick:()=>upd(()=>{ it.kind = k; it.qty = ""; })}, h("b",{style:"font-size:14px"}, l.replace("加工","")), h("small",null, f ? "＋"+yen(procOf(k)[3]!=null && it.early ? procOf(k)[3] : f)+"/kg" : "加工なし")))),
+      it.kind!=="live" ? h("div",{class:"row",style:"gap:10px"}, h("span",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"加工賃"),
+        h("div",{class:"yn", role:"radiogroup","aria-label":"早割"},
+          h("button",{type:"button", role:"radio", "aria-pressed":String(!it.early), "aria-checked":String(!it.early), onclick:()=>upd(()=>{ it.early = false; })},"通常 ＋"+yen(procOf(it.kind)[2])),
+          h("button",{type:"button", role:"radio", class:"alt", "aria-pressed":String(!!it.early), "aria-checked":String(!!it.early), onclick:()=>upd(()=>{ it.early = true; })},"早割 ＋"+yen(procOf(it.kind)[3])))) : null,
       h("div",{class:"grid2"},
         field(it.kind==="shiro" ? "枚数" : "数量（活鰻kg）", inp("qty", it.kind==="shiro" ? "例：40" : "例：10", it.kind==="shiro" ? "numeric" : "decimal"),
           it.kind==="shiro" && P && isNum(it.qty) ? "活鰻 約"+num(Number(it.qty)/P,2).replace(/\.?0+$/,"")+"kg（"+it.size+"＝1kgに"+P+"尾）" : null),
