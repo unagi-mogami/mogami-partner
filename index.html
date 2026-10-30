@@ -3733,50 +3733,50 @@ function codeEditor(d){
       shown.map(z=>h("label",{class:"f"}, z+(d.sizes.includes(z) ? "" : "（取扱サイズ外）"), h("input",{class:"i", id:"p-code-"+z, inputmode:"decimal", autocomplete:"off", placeholder:"例：0074", value:d.codes[z]??"", oninput:e=>{ d.codes[z] = e.target.value; }})))) :
       h("p",{class:"small muted",style:"margin:0"},"先にサイズ規格を選んでください。"));
 }
-/* 見積書：コードで入れる */
-function qtCodeBox(q, upd){
-  const st = S.qtCode || (S.qtCode = {v:""});
-  const lastEel = () => [...q.items].reverse().find(x=>x.product);
+/* 見積書：コードで入れる。各商品の欄（商品1・商品2…）の一番上にコード欄があり、入れたコードはその欄に入る。
+   同じコードの商品が複数ある時はタブで選ぶ。うなぎの欄にうなぎ以外のコードを入れた時（またはその逆）は、正しい側の空いた欄に入れる */
+function qtCodeField(q, upd, side, row){
+  const st = S.qtCode || (S.qtCode = {}), key = side+":"+row.id;
+  const val = () => st[key] || "";
   const put = t => {
     if (t.type==="ship"){ toast("運賃は、納品方法で「宅配便」を選ぶと自動でつきます"); return; }
     if (t.type==="eel" && !t.ok){ toast(t.name+" の "+t.size+" は、商品マスタの取扱サイズに入っていません"); return; }
-    if (t.type==="proc" && !lastEel()){ toast("先にうなぎを入れてから、加工のコードを入れてください"); return; }
-    st.v = "";
+    if (t.type==="proc" && !(side==="eel" && row.product)){ toast("加工のコードは、うなぎを入れた欄に入れてください"); return; }
+    st[key] = "";
     upd(()=>{
       if (t.type==="eel"){
-        let it = q.items.find(x=>!x.product);
+        let it = side==="eel" ? row : (q.items.find(x=>!x.product) || null);
         if (!it){ it = {id:rid(), product:"", size:"", kind:"live", qty:"", price:""}; q.items.push(it); }
         it.product = t.name; it.size = t.size; it.price = "";
-        toast(t.name+" "+t.size+" を入れました。数量を入れてください");
+        toast(t.name+" "+t.size+" を入れました"+(side==="eel" ? "" : "（うなぎの欄）")+"。数量を入れてください");
       } else if (t.type==="extra"){
         if (!q.extras) q.extras = [];
-        let it = q.extras.find(x=>!x.eid);
+        let it = side==="extra" ? row : (q.extras.find(x=>!x.eid) || null);
         if (!it){ it = {id:rid(), eid:"", qty:"", price:""}; q.extras.push(it); }
         it.eid = t.eid; it.price = "";
-        toast(t.name+" を入れました。数量を入れてください");
+        toast(t.name+" を入れました"+(side==="extra" ? "" : "（うなぎ以外の欄）")+"。数量を入れてください");
       } else if (t.type==="proc"){
-        const it = lastEel(); if ((it.kind==="shiro") !== (t.kind==="shiro")) it.qty = "";
-        it.kind = t.kind; toast(it.product+" "+(it.size||"")+" を「"+t.name+"」にしました");
+        if ((row.kind==="shiro") !== (t.kind==="shiro")) row.qty = "";
+        row.kind = t.kind; toast(row.product+" "+(row.size||"")+" を「"+t.name+"」にしました");
       }
     });
   };
   const hint = h("div",{class:"stack",style:"gap:8px"});
   const fill = () => {
-    const v = st.v.trim(), hits = v ? findCode(v) : [];
-    if (!v){ hint.replaceChildren(h("span",{class:"qhint"},"例：0074（4桁の数字は頭の0を省いてもOK）")); return; }
+    const v = val().trim(), hits = v ? findCode(v) : [];
+    if (!v){ hint.replaceChildren(); return; }
     if (!hits.length){ hint.replaceChildren(h("span",{class:"qhint bad"},"コード「"+v+"」の商品はありません")); return; }
-    if (hits.length===1){ hint.replaceChildren(h("span",{class:"qhint"}, "→ ", h("b",null, codeHitLabel(hits[0])), "（「入れる」で追加）")); return; }
-    hint.replaceChildren(h("span",{class:"qhint"},"このコードの商品が"+hits.length+"つあります。入れる商品を選んでください"),
+    if (hits.length===1){ hint.replaceChildren(h("span",{class:"qhint"}, "→ ", h("b",null, codeHitLabel(hits[0])), "（「入れる」で決定）")); return; }
+    hint.replaceChildren(h("span",{class:"qhint"},"このコードの商品が"+hits.length+"つあります。選んでください"),
       h("div",{class:"seg", role:"tablist", "aria-label":"コード "+v+" の商品", style:"grid-template-columns:repeat("+Math.min(hits.length,3)+",minmax(0,1fr))"},
-        hits.map(t=>h("button",{type:"button", role:"tab", "aria-selected":"false", onclick:()=>put(t)}, h("b",{style:"font-size:14px"}, t.type==="eel" ? t.name : t.name), h("small",null, t.type==="eel" ? t.size : t.type==="extra" ? (Number(t.price)>0 ? yen(t.price)+"/"+t.unit : "時価") : "")))));
+        hits.map(t=>h("button",{type:"button", role:"tab", "aria-selected":"false", style:"min-height:64px;padding:6px 4px", onclick:()=>put(t)}, h("b",{style:"font-size:13px;line-height:1.3;white-space:normal;text-align:center;font-family:var(--f-body)"}, t.name), h("small",null, t.type==="eel" ? t.size : t.type==="extra" ? (Number(t.price)>0 ? yen(t.price)+"/"+t.unit : "時価") : "")))));
   };
-  const go1 = () => { const hits = st.v.trim() ? findCode(st.v) : []; if (hits.length===1) put(hits[0]); else if (!hits.length) toast(st.v.trim() ? "コード「"+st.v.trim()+"」の商品はありません" : "コードを入れてください"); else toast("下のタブから、入れる商品を選んでください"); };
+  const go1 = () => { const v = val().trim(), hits = v ? findCode(v) : []; if (hits.length===1) put(hits[0]); else if (!hits.length) toast(v ? "コード「"+v+"」の商品はありません" : "コードを入れてください"); else toast("下のタブから選んでください"); };
   fill();
-  return h("section",{class:"panel stack"},
-    h("b",null,"コードで入れる"),
-    h("div",{class:"row",style:"flex-wrap:nowrap"},
-      h("input",{class:"i", id:"qt-code", inputmode:"decimal", enterkeyhint:"done", autocomplete:"off", placeholder:"商品コード", value:st.v, style:"flex:1;min-width:0",
-        oninput:e=>{ st.v = e.target.value; fill(); }, onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); go1(); } }}),
+  return h("div",{class:"f"}, h("span",{class:"small",style:"font-weight:700;color:var(--ink-2)"},"商品コード"),
+    h("div",{class:"row",style:"flex-wrap:nowrap;gap:8px"},
+      h("input",{class:"i", id:"qc-"+key.replace(":","-"), inputmode:"decimal", enterkeyhint:"done", autocomplete:"off", placeholder:"例：0074（頭の0は省略可）", value:val(), style:"flex:1;min-width:0",
+        oninput:e=>{ st[key] = e.target.value; fill(); }, onkeydown:e=>{ if (e.key==="Enter"){ e.preventDefault(); go1(); } }}),
       h("button",{class:"btn primary", type:"button", onclick:go1},"入れる")),
     hint);
 }
@@ -3944,6 +3944,7 @@ function quoteView(){
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qt-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"商品 "+(i+1)), q.items.length > 1 ? h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.items = q.items.filter(x=>x.id!==it.id); })},"この商品を消す") : null),
+      qtCodeField(q, upd, "eel", it),
       field("商品", searchPick({id:"qt-"+it.id+"-product", value:it.product, placeholder:"商品名・産地で検索（例：かぐや、宮崎）",
         items:prods.map(x=>({v:x.name, l:x.name, k:[x.origin, x.brand, x.sizes, Object.values(x.codes||{})]})),
         onPick:v=>upd(()=>{ if (it.product!==v){ it.product = v; it.size = ""; it.price = ""; } })})),
@@ -3964,7 +3965,6 @@ function quoteView(){
       h("div",{class:"grid2"},
         field("お店の名前（宛名）", h("input",{class:"i shopname", id:"qt-shop", placeholder:"例：うなぎ処 ○○", value:q.shop, oninput:e=>{ q.shop = e.target.value; qtSave(); }, onchange:()=>render()})),
         field("ご担当者（任意）", h("input",{class:"i", id:"qt-person", placeholder:"例：店主 ○○", value:q.person, oninput:e=>{ q.person = e.target.value; qtSave(); }, onchange:()=>render()})))),
-    qtCodeBox(q, upd),
     items,
     h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.items.push({id:rid(), product:"", size:"", kind:"live", qty:"", price:""}); })},"＋ うなぎを追加")),
     qtExtrasEditor(q, c, upd),
@@ -4006,6 +4006,7 @@ function qtExtrasEditor(q, c, upd){
     const inp = (k, ph, mode) => h("input",{class:"i", id:"qx-"+it.id+"-"+k, type:"number", inputmode:mode||"decimal", min:0, placeholder:ph, value:it[k]??"", oninput:e=>{ it[k] = e.target.value; qtSave(); }, onchange:()=>render()});
     return h("div",{class:"qitem"},
       h("div",{class:"hd"}, h("b",null,"うなぎ以外 "+(i+1)), h("button",{class:"linkbtn", style:"margin-left:auto", onclick:()=>upd(()=>{ q.extras = q.extras.filter(x=>x.id!==it.id); })},"消す")),
+      qtCodeField(q, upd, "extra", it),
       field("品目", searchPick({id:"qx-"+it.id+"-eid", value:it.eid, placeholder:"品名・区分で検索（例：肝、串、山椒）",
         items:EXTRA_CATS.flatMap(cg=>EX.filter(x=>extraCat(x)===cg).map(x=>({v:x.id, l:(x.code ? "["+x.code+"] " : "")+x.name+"（"+(Number(x.price)>0 ? yen(x.price) : "時価")+"/"+x.unit+"・"+x.tax+"%）", g:cg, k:[x.code]}))),
         onPick:v=>upd(()=>{ if (it.eid!==v){ it.eid = v; it.price = ""; } })})),
