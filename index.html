@@ -410,6 +410,15 @@ details.memo>summary{font-size:12px;color:var(--muted);font-weight:500}
 .qitem .hd b{font-family:var(--f-display);color:var(--green)}
 .seg.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .qhint{font-size:12px;color:var(--muted)}
+.stk{display:flex;flex-direction:column;gap:8px}
+.stkrow{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.stkhd{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.stkhd b{flex:1 1 10em;min-width:0}
+.stkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
+.stkgrid button{min-height:52px;border-radius:8px;border:2px solid var(--line);background:var(--sunk);font-weight:700;font-size:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.1;color:var(--muted)}
+.stkgrid button small{font-size:11px;font-weight:500}
+.stkgrid button.on{background:var(--green-solid);border-color:var(--green-solid);color:var(--on-green)}
+.stkgrid button.unk{background:var(--surface);border-style:dashed;border-color:var(--amber);color:var(--amber)}
 .qhint.bad{color:var(--red);font-weight:700}
 .qprev{border:1px solid var(--line);border-radius:var(--r);background:#fff;overflow:hidden}
 .qdoc{background:#fff;color:#111;font-family:var(--f-body);font-size:12px;line-height:1.5;padding:20px}
@@ -1556,6 +1565,7 @@ function productsView(){
   if (demoCount) wrap.append(h("div",{class:"banner warn"}, h("div",{style:"flex:1"},"架空データが "+demoCount+" 件あります（名前に【架空】・点線バッジ）。実際の商品を登録したら削除してください。"),
     can("prodEdit") ? deleteControl("demo-all","架空データを一括削除", async()=>{ for (const p of S.products.filter(x=>x.demo)) await write(()=>S.db.doc("products/"+p.id).delete()); toast("架空データを削除しました"); }) : null));
   if (!S.products.length) wrap.append(h("div",{class:"panel"}, h("h3",null,"商品が登録されていません"), h("p",{class:"muted"},"「商品を登録」から、産地・サイズ・味・脂・皮・身質・在庫などを入れてください。")));
+  if (can("stockEdit") && S.products.length) wrap.append(stockQuickPanel());
   /* 検索：うなぎ・うなぎ以外の両方の一覧をしぼる（入力中は一覧だけ描き直し、文字入力が途切れないようにする） */
   wrap.append(searchBox("prod-q", S.prodQuery||"", "商品名・産地・区分で検索（例：かぐや、宮崎、肝）", v=>{ S.prodQuery = v;
     for (const [id, fn] of [["prod-table", prodTable], ["ex-table", exTable]]){ const el = document.getElementById(id); if (el) el.replaceWith(fn()); } }));
@@ -1586,6 +1596,39 @@ function prodTable(){
         h("td",null, h("span",{class:"pill "+sc},sl)), h("td",null, isNum(p.quality)? p.quality+"/5" : unk("")),
         h("td",null, can("prodEdit") ? h("div",{class:"row",style:"gap:6px;flex-wrap:nowrap"}, h("button",{class:"btn sm", onclick:()=>openProduct(p)},"編集"), h("button",{class:"btn sm ghost", onclick:()=>duplicateProduct(p)},"複製")) : null));
     })));
+}
+/* 在庫のかんたん更新：商品ごとにサイズのボタンを並べ、押すと「あり⇄なし」が切り替わってすぐ保存。
+   続けて押しても前の変更を消さないよう、保存が戻ってくるまでの値は S.stkPend に持つ */
+const stkCur = (p, s) => { const v = S.stkPend?.[p.id]?.[s]; return v!==undefined ? v : sizeAvail(p, s); };
+async function stkSet(p, map){
+  const sz = p.sizes||[];
+  const pend = S.stkPend || (S.stkPend = {}), mine = pend[p.id] || (pend[p.id] = {});
+  Object.assign(mine, map);
+  const by = {}; for (const x of sz) by[x] = {cost: rawCost(p,x), avail: stkCur(p,x)};
+  render();
+  const ok = await write(()=>S.db.doc("products/"+p.id).update({bySize:by, stock:null, updatedAt:nowIso(), updatedBy:S.uid}));
+  if (!ok){ for (const k of Object.keys(map)) delete mine[k]; render(); }
+}
+function stockQuickPanel(){
+  const list = S.products.filter(p=>(p.sizes||[]).length).sort((a,b)=>(a.demo?1:0)-(b.demo?1:0));
+  /* 保存が反映された分は、待ちの値を消す */
+  for (const p of list){ const m = S.stkPend?.[p.id]; if (m) for (const s of Object.keys(m)) if (sizeAvail(p,s)===m[s]) delete m[s]; }
+  const open = S.stkOpen ?? true;
+  const rows = list.map(p=>{
+    const sz = p.sizes, on = sz.filter(s=>stkCur(p,s)===true).length, unk = sz.filter(s=>stkCur(p,s)==null).length;
+    return h("div",{class:"stkrow"},
+      h("div",{class:"stkhd"}, h("b",null, p.name), h("span",{class:"pill "+(on ? "ok" : "line")}, on ? "あり "+on+"/"+sz.length : "全部なし"), unk ? h("span",{class:"pill warn"},"未設定 "+unk) : null),
+      h("div",{class:"stkgrid"}, sz.map(s=>{ const v = stkCur(p,s);
+        return h("button",{type:"button", class: v===true ? "on" : v===false ? "off" : "unk", "aria-pressed":String(v===true), "aria-label":p.name+" "+s+"：在庫"+(v===true ? "あり" : v===false ? "なし" : "未設定"),
+          onclick:()=>stkSet(p, {[s]: v!==true})}, s, h("small",null, v===true ? "あり" : v===false ? "なし" : "未設定")); })),
+      h("div",{class:"row",style:"gap:6px"},
+        h("button",{type:"button", class:"btn sm ghost", onclick:()=>stkSet(p, Object.fromEntries(sz.map(s=>[s,true])))},"全部あり"),
+        h("button",{type:"button", class:"btn sm ghost", onclick:()=>stkSet(p, Object.fromEntries(sz.map(s=>[s,false])))},"全部なし")));
+  });
+  return h("section",{class:"panel stack", id:"stock-quick"},
+    h("div",{class:"row"}, h("h2",{style:"font-size:18px;flex:1"},"活鰻の在庫"),
+      h("button",{type:"button", class:"btn sm ghost", onclick:()=>{ S.stkOpen = !open; render(); }}, open ? "閉じる" : "開く")),
+    open ? [h("p",{class:"small muted",style:"margin:0"},"サイズを押すと「あり ⇄ なし」が切り替わり、すぐ保存されます。緑＝あり。"), h("div",{class:"stk"}, rows)] : null);
 }
 function stockCell(p){
   const sz = p.sizes||[];
