@@ -2512,7 +2512,7 @@ function backupPanel(){
 const REC_FORM = "https://docs.google.com/forms/d/e/1FAIpQLScfU34FYLes3ThWx6U-yBZSgHFdPB4lSQLm2MQqi3m-JCmCUA/formResponse";
 const REC_ENTRY = "entry.1301070373";
 const REC_KINDS = [["visit","訪問"],["diag","診断"],["quote","見積"],["sample","サンプル提供"],["deal","成約"]];
-const REC_LABEL = Object.fromEntries([...REC_KINDS, ["karte","顧客カルテ"]]);   // karte：社長から引き継いだカルテ情報（件数には数えない）
+const REC_LABEL = Object.fromEntries([...REC_KINDS, ["karte","顧客カルテ"], ["join","社員登録"]]);   // karte：社長から引き継いだカルテ情報（件数には数えない）。join：社員登録の合図（社長の承認待ちに出すだけ。一覧・件数には出さない）
 const REC_ME_KEY = "mogami.rec.me", REC_Q_KEY = "mogami.rec.queue", REC_LOG_KEY = "mogami.rec.log";
 function lsGet(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
 function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
@@ -2710,7 +2710,7 @@ function recMyLog(){
   const me = recMe(); if (!me) return [];
   const all = [...lsGet(REC_Q_KEY, []).map(x=>({...x, unsent:true})), ...lsGet(REC_LOG_KEY, [])];
   const cancelled = new Set(all.filter(x=>x.kind==="cancel").map(x=>x.ref));
-  return recLatest(all.filter(x=>x.name===me.name && x.kind!=="cancel" && !cancelled.has(recRoot(x)))).sort((a,b)=>recVer(b).localeCompare(recVer(a)));
+  return recLatest(all.filter(x=>x.name===me.name && x.kind!=="cancel" && x.kind!=="join" && !cancelled.has(recRoot(x)))).sort((a,b)=>recVer(b).localeCompare(recVer(a)));
 }
 function recEntryPanel(){
   if (!STANDALONE && !S.guest) return null;
@@ -2735,7 +2735,9 @@ function recRegisterView(forQuote){
       staffCodeOk(g.code).then(okc => { R.busy = false;
         if (!okc) return toast("社員コードが違います。社長から届いたLINEを確認してください");
         if (!lsSet(REC_ME_KEY, {name, pin, sk:STAFF_KEY.v, code:normCode(g.code)})) return toast("この端末に保存できませんでした（プライベートブラウズを解除してください）");
-        R.reg = {name:"", pin:"", code:""}; toast(name+" さんで登録しました"); render(); }); }},
+        R.reg = {name:"", pin:"", code:""}; toast(name+" さんで登録しました。社長に承認のお願いを送りました"); render();
+        recAdd({kind:"join"});   // 社長の「承認待ち」にすぐ出すための合図（記録の一覧・件数には出さない）
+      }); }},
       field("社員コード", h("input",{class:"i", id:"rec-code", autocomplete:"off", autocapitalize:"off", spellcheck:"false", placeholder:"例：abcd-2345", ...bind(g,"code")}), "社長からLINEで届いた、社員専用のコードです。"),
       field("名前（フルネーム）", h("input",{class:"i", id:"rec-name", autocomplete:"name", placeholder:"例：山田 太郎", ...bind(g,"name")}), "社長が実績を見るときの名前です。毎回同じ名前にしてください。"),
       field("暗証番号（数字4けた）", h("input",{class:"i", id:"rec-pin", type:"password", inputmode:"numeric", maxlength:4, autocomplete:"off", placeholder:"••••", ...bind(g,"pin")}), "社長から伝えられた番号。ほかの人があなたの名前で記録できないようにするためのものです。"),
@@ -3272,7 +3274,7 @@ const staffApprove = (prev, pin) => prev && String(prev.pin)!==String(pin) ? {pi
 function resValid(withExcluded){
   const X = resState(), list = resStaff(), ex = X.exclDoc?.ids || {};
   const ok = r => r.uid ? true : staffPinOk(list[r.name], r.pin);
-  const all = X.recs.filter(ok);
+  const all = X.recs.filter(r=>ok(r) && r.kind!=="join");   // 社員登録の合図は件数・一覧に入れない
   const cancel = new Set(all.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref));
   const live0 = recLatest(all.filter(r=>r.kind!=="cancel" && !cancel.has(r.name+"|"+recRoot(r)) && (withExcluded || !(ex[r.id] || ex[recRoot(r)]))));
   /* 社員に引き継いだ社長名義の記録は、社員側の記録（承認済み）があれば数えない */
@@ -3359,6 +3361,7 @@ function recHay(r){
 const shopKey = t => normQ(t).replace(/[\s・･\-ー－]/g,"").replace(/(様|さま)$/,"");
 function sameShop(a, b){ const x = shopKey(a), y = shopKey(b); return !!x && !!y && (x===y || (Math.min(x.length,y.length)>=3 && (x.includes(y) || y.includes(x)))); }
 function recBrowser(key, recs, opt){
+  recs = recs.filter(r=>r.kind!=="join");   // 社員登録の合図は記録の一覧に出さない
   const B = (S.br = S.br || {})[key] || (S.br[key] = {q:"", kind:"", who:"", photo:false, lim:30, open:{}, view:"date", shopOpen:{}});
   if (!B.shopOpen) B.shopOpen = {};
   const names = [...new Set(recs.map(r=>r.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
@@ -3510,8 +3513,10 @@ function resultsView(){
   /* 社員が「取り消す」を押した記録は数えない。社長が「消す」（または承認済みから「外す」）にした名前＋番号は、もう出さない */
   const cancelled = new Set(X.recs.filter(r=>r.kind==="cancel").map(r=>r.name+"|"+r.ref)), dis = X.dismissDoc?.keys || {};
   const pend = {}, hidden = {};
-  for (const r of X.recs) if (!r.uid && !r.edit && r.kind!=="cancel" && !cancelled.has(r.name+"|"+r.id) && !(X.exclDoc?.ids||{})[r.id] && !staffPinOk(list[r.name], r.pin)){
-    const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend; (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]}).n++; }
+  /* 送った記録を全部取り消した新しい社員も、承認待ちには出す（件数は取り消していない記録だけ数える） */
+  for (const r of X.recs) if (!r.uid && !r.edit && r.name && !(X.exclDoc?.ids||{})[r.id] && !staffPinOk(list[r.name], r.pin)){
+    const k = r.name+"|"+r.pin, box = dis[k] ? hidden : pend, e = (box[k] = box[k] || {k, name:r.name, pin:r.pin, n:0, known: !!list[r.name]});
+    if (r.kind==="join") e.j = true; else if (r.kind==="cancel" || cancelled.has(r.name+"|"+r.id)) e.c = true; else e.n++; }
   const pends = Object.values(pend), hiddens = Object.values(hidden);
   const per = [["month","今月"],["last","先月"],["year","今年"],["all","全期間"]];
   return h("div",{class:"stack"},
@@ -3535,12 +3540,12 @@ function resultsView(){
     h("section",{class:"sec"}, h("h2",null,"承認待ち・暗証番号の不一致", h("span",{class:"c"}, pends.length+"件")),
       h("p",{class:"small muted",style:"margin:0"},"独立版の記録は、名前と暗証番号を承認するまで集計に入りません。知らない名前やテストの記録は承認せず「記録ごと消す」を押してください（社員の「みんなの記録」からも消えます）。"),
       h("div",{class:"log"}, pends.length ? pends.map(x=>h("div",{class:"e"},
-        h("div",null, h("b",null,x.name), "　記録 "+x.n+" 件", x.known ? h("span",{class:"pill bad",style:"margin-left:6px"},"登録済みの番号と違う") : null),
+        h("div",null, h("b",null,x.name), "　記録 "+x.n+" 件"+(x.n ? "" : x.c ? "（送った記録はすべて取り消し済み）" : "（社員登録だけで、記録はまだありません）"), x.known ? h("span",{class:"pill bad",style:"margin-left:6px"},"登録済みの番号と違う") : null),
         h("div",{class:"row"}, x.known ? h("span",{class:"small muted"},"登録し直して番号が変わった時は「この番号で承認」を押してください（前の番号の記録も、そのまま本人の実績に残ります）。") : null,
           h("button",{class:"btn sm primary", onclick:()=>resSaveStaff({...list, [x.name]:staffApprove(list[x.name], x.pin)})}, x.known ? "この番号で承認" : "社員として承認"),
           deleteControl("pd:"+x.k, "記録ごと消す", async ()=>{ if (await resDeleteMany(X.recs.filter(r=>!r.uid && r.kind!=="cancel" && r.name+"|"+r.pin===x.k))) resDismiss(x.k, true); })))) : h("div",{class:"empty"},"ありません。")),
       hiddens.length ? h("details",{class:"x"}, h("summary",null,"消した承認待ち（"+hiddens.length+"件）"),
-        h("div",{class:"log"}, hiddens.map(x=>h("div",{class:"e"}, h("div",{class:"row"}, h("span",{style:"flex:1"}, h("b",null,x.name), "　記録 "+x.n+" 件"),
+        h("div",{class:"log"}, hiddens.map(x=>h("div",{class:"e"}, h("div",{class:"row"}, h("span",{style:"flex:1"}, h("b",null,x.name), "　記録 "+x.n+" 件"+(x.n ? "" : x.c ? "（送った記録はすべて取り消し済み）" : "（社員登録だけで、記録はまだありません）")),
           h("button",{class:"btn sm", onclick:()=>resDismiss(x.k, false)},"承認待ちに戻す"), deleteControl("hd:"+x.k, "記録ごと消す", ()=>resDeleteMany(X.recs.filter(r=>!r.uid && r.kind!=="cancel" && r.name+"|"+r.pin===x.k)))))))) : null),
     h("section",{class:"sec"}, h("h2",null,"承認済みの社員", h("span",{class:"c"}, Object.keys(list).length+"人")),
       h("div",{class:"log"}, Object.keys(list).length ? Object.keys(list).sort((a,b)=>a.localeCompare(b,"ja")).map(n=>h("div",{class:"e"},

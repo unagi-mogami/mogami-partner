@@ -69,6 +69,11 @@ SEED_JS = r"""
   rec("t-q2", 40, {kind:"quote", shop:"テスト割烹", quote:quote("QTEST-0002", "テスト割烹", 8000, [line("テスト商品", 1, 8000), line("別の商品", 0, 0)])});
   rec("t-sample", 35, {kind:"sample", shop:"テスト割烹", memo:"サンプルのテスト"});
   rec("t-deal", 30, {kind:"deal", shop:"テスト割烹", product:(PUB.products&&PUB.products[0]||{}).name||"", size:"any", kg:3, price:4000, newDeal:true});
+  // 独立版の新しい社員（未承認）：1人は記録あり、1人は送った記録を自分で全部取り消した → どちらも承認待ちに出るのが正しい
+  put("records/s-new1", {v:1, id:"s-new1", at:iso(25), date:today, name:"テスト新人A", src:"standalone", pin:"1111", kind:"visit", shop:"テスト店"});
+  put("records/s-new2", {v:1, id:"s-new2", at:iso(24), date:today, name:"テスト新人B", src:"standalone", pin:"2222", kind:"quote", shop:"テスト店", quote:quote("QTEST-0009", "テスト店", 5000, [line("テスト商品", 1, 5000)])});
+  put("records/s-new2c", {v:1, id:"s-new2c", at:iso(23), date:today, name:"テスト新人B", src:"standalone", pin:"2222", kind:"cancel", ref:"s-new2", shop:"テスト店"});
+  put("records/s-new3", {v:1, id:"s-new3", at:iso(22), date:today, name:"テスト新人C", src:"standalone", pin:"3333", kind:"join"});   // 社員登録の合図だけ
   put("customers/t-cust", {name:"テスト鰻店", memo:"テスト用のカルテ"});
 
   const listeners = new Set();
@@ -188,6 +193,19 @@ with sync_playwright() as p:
         for d in dups: bad("実績：同じボタンが2つ以上並んでいる " + d)
         if cnt >= 6 and not errs and not dups: ok("実績：記録を全部開いた（%d件・ボタンの重複なし）" % cnt)
 
+        # 承認待ち：未承認の新しい社員が出るか（送った記録を全部取り消した人・社員登録の合図だけの人も出す）
+        pend = pg.locator("main section.sec", has_text="承認待ち・暗証番号の不一致")
+        ptxt = pend.inner_text() if pend.count() else ""
+        miss = [n for n in ("テスト新人A", "テスト新人B", "テスト新人C") if n not in ptxt]
+        if miss: bad("実績：未承認の社員が承認待ちに出ない（%s）" % "、".join(miss))
+        elif pend.locator("button", has_text="社員として承認").count() < 2: bad("実績：承認待ちに「社員として承認」ボタンがない")
+        else:
+            n = len(errors)
+            pend.locator("button", has_text="社員として承認").first.click(); pg.wait_for_timeout(800)
+            ptxt2 = pg.locator("main section.sec", has_text="承認待ち・暗証番号の不一致").inner_text()
+            if new_err(n): bad("実績：「社員として承認」を押すとエラー " + new_err(n))
+            elif "テスト新人A" in ptxt2 and "テスト新人B" in ptxt2: bad("実績：「社員として承認」を押しても承認待ちから消えない")
+            else: ok("実績：承認待ち（取り消し済み・登録だけの新人も出る・承認できる）")
     # 顧客カルテ：テスト用のカルテを開く
     if "#customers" in hrefs:
         n = len(errors)

@@ -24,7 +24,7 @@
      - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 見積書：うなぎ以外（付属品）・運賃の税率別計算と、運賃なし・付属品値引きの承認
-     - 営業記録：社員コードが違うと登録できないこと。正しいコードで社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
+     - 営業記録：社員コードが違うと登録できないこと。登録時に社長へ承認の合図（join）が届くこと。正しいコードで社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
 import json, os, re, subprocess, sys, tempfile, threading, http.server, functools, urllib.parse
@@ -274,6 +274,12 @@ if sync_playwright:
                     elif not pg.locator("#rec-shop").count(): bad("営業記録：正しい社員コードで登録できない")
                     else:
                         ok("営業記録：社員登録")
+                        # 登録した時に、社長の「承認待ち」に出すための合図（kind=join）がフォームに届くか
+                        pg.wait_for_timeout(500)
+                        _joins = [json.loads(v) for body in sent for k, v in urllib.parse.parse_qsl(body) if k.startswith("entry.") and '"join"' in v]
+                        if not any(j.get("kind") == "join" and j.get("name") == "チェック 太郎" and j.get("pin") == "0000" for j in _joins):
+                            bad("営業記録：社員登録しても社長に承認の合図（join）が送られない")
+                        else: ok("営業記録：登録時に承認の合図を送信")
                         pg.fill("#rec-shop", "チェック用の店")
                         pg.locator("main .seg button", has_text="訪問").first.click(); pg.wait_for_timeout(200)
                         pg.locator("main button", has_text="記録する").first.click(); pg.wait_for_timeout(1500)
