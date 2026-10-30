@@ -24,7 +24,7 @@
      - 独立版：新しい版を正しく見分けられるか
      - 見積書：白焼1枚の単価と合計の計算、値引き時に承認なしで出せないこと
      - 見積書：うなぎ以外（付属品）・運賃の税率別計算と、運賃なし・付属品値引きの承認
-     - 営業記録：社員コードが違うと登録できないこと。登録時に社長へ承認の合図（join）が届くこと。正しいコードで社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
+     - 営業記録：社員コードが違うと登録できないこと。登録時に社長へ承認の合図（join）が届くこと。営業電話（結果・ご担当者・次の予定）を記録して送れること。正しいコードで社員登録して訪問を1件記録し、送る中身が正しいか（本物のフォームには送らない）
 合言葉は表示・保存しない。
 """
 import json, os, re, subprocess, sys, tempfile, threading, http.server, functools, urllib.parse
@@ -319,6 +319,24 @@ if sync_playwright:
                                     bad("営業記録：直した記録の中身が正しくない（%s）" % json.dumps(e0, ensure_ascii=False)[:120])
                                 elif log_txt.count("チェック用の店") != 1 or "直したメモ" not in log_txt: bad("営業記録：直したあと一覧が二重になる／直した内容が出ない")
                                 else: ok("営業記録：記録を直す")
+                            # 営業電話：結果なしでは送れない／かけた・結果・ご担当者・次の予定が送られ、一覧に出る
+                            n0 = len(sent)
+                            pg.fill("#rec-shop", "電話チェック店")
+                            pg.locator("main .seg button", has_text="電話").first.click(); pg.wait_for_timeout(200)
+                            if not pg.locator("#rec-person").count(): bad("営業記録：「電話」を選んでも電話の入力欄が出ない")
+                            else:
+                                pg.locator("main button", has_text="記録する").first.click(); pg.wait_for_timeout(800)
+                                if len(sent) > n0: bad("営業記録：電話の結果を選ばなくても送れてしまう")
+                                pg.locator("main .react button", has_text="アポが取れた").first.click(); pg.wait_for_timeout(150)
+                                pg.fill("#rec-person", "店長 チェック様"); pg.fill("#rec-next", "2030-01-15")
+                                pg.locator("main button", has_text="記録する").first.click(); pg.wait_for_timeout(1500)
+                                got = [json.loads(v) for body in sent[n0:] for k, v in urllib.parse.parse_qsl(body) if k.startswith("entry.")]
+                                c0 = got[-1] if got else None
+                                if not c0: bad("営業記録：電話を記録しても送られない")
+                                elif not (c0.get("kind") == "call" and c0.get("callDir") == "out" and c0.get("callResult") == "アポが取れた" and c0.get("person") == "店長 チェック様" and c0.get("nextDate") == "2030-01-15" and c0.get("shop") == "電話チェック店" and c0.get("pin") == "0000"):
+                                    bad("営業記録：電話の記録の中身が正しくない（%s）" % json.dumps(c0, ensure_ascii=False)[:140])
+                                elif "アポが取れた" not in pg.inner_text("main .log"): bad("営業記録：電話の記録が「最近の記録」に出ない")
+                                else: ok("営業記録：営業電話を記録して送信")
                         # 社長からの引き継ぎ（リンクを開く → 自分の記録として送る。宛先が違う時は送れない）
                         if pg.evaluate("()=>typeof mvSeal==='function' && typeof STANDALONE!=='undefined' && STANDALONE"):
                             items = [{"from": "chk-r1", "kind": "diag", "shop": "引継ぎ店", "memo": "引継ぎメモ", "at": "2026-10-01T01:00:00.000Z", "date": "2026-10-01"},

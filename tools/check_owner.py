@@ -67,6 +67,7 @@ SEED_JS = r"""
   rec("t-q1a", 50, {kind:"quote", shop:"テスト鰻店", quote:quote("QTEST-0001", "テスト鰻店", 10000, [line("テスト商品", 2, 5000)])});
   rec("t-q1b", 45, {kind:"quote", shop:"テスト鰻店", quote:quote("QTEST-0001", "テスト鰻店", 12000, [line("テスト商品", 2, 6000)])});
   rec("t-q2", 40, {kind:"quote", shop:"テスト割烹", quote:quote("QTEST-0002", "テスト割烹", 8000, [line("テスト商品", 1, 8000), line("別の商品", 0, 0)])});
+  rec("t-call", 58, {kind:"call", shop:"テスト鰻店", callDir:"out", callResult:"アポが取れた", person:"店長 テスト様", nextDate:"2099-01-15", memo:"テストの電話"});
   rec("t-sample", 35, {kind:"sample", shop:"テスト割烹", memo:"サンプルのテスト"});
   rec("t-deal", 30, {kind:"deal", shop:"テスト割烹", product:(PUB.products&&PUB.products[0]||{}).name||"", size:"any", kg:3, price:4000, newDeal:true});
   // 独立版の新しい社員（未承認）：1人は記録あり、1人は送った記録を自分で全部取り消した → どちらも承認待ちに出るのが正しい
@@ -169,11 +170,13 @@ with sync_playwright() as p:
         allp = pg.locator("main .tabbar button", has_text="全期間")
         if allp.count(): allp.first.click(); pg.wait_for_timeout(300)
         kpi = pg.evaluate("""()=>{ const o={}; document.querySelectorAll('main .kpi').forEach(k=>{ const l=k.querySelector('.l'), v=k.querySelector('.v'); if(l&&v) o[l.textContent.trim()]=v.textContent.trim(); }); return o; }""")
+        if kpi.get("電話") != "1": bad("実績：電話の件数が %s（テストでは1件）" % kpi.get("電話"))
+        else: ok("実績：電話の件数")
         if kpi.get("見積") != "2": bad("実績：見積の件数が %s（テストでは2件。同じ見積の送り直しは1件に数える）" % kpi.get("見積"))
         else: ok("実績：見積の件数（送り直しは1件）")
         rows = pg.locator("main .rrow .rsum")
         cnt = rows.count()
-        if cnt < 6: bad("実績：記録の一覧に出る数が少ない（%d件。テストでは6件）" % cnt)
+        if cnt < 7: bad("実績：記録の一覧に出る数が少ない（%d件。テストでは7件）" % cnt)
         dups = []; errs = []
         for i in range(cnt):
             n = len(errors)
@@ -191,7 +194,7 @@ with sync_playwright() as p:
             pg.locator("main .rrow.open .rsum").first.click(); pg.wait_for_timeout(150)
         for e in errs: bad("実績：記録を開くとエラー " + e)
         for d in dups: bad("実績：同じボタンが2つ以上並んでいる " + d)
-        if cnt >= 6 and not errs and not dups: ok("実績：記録を全部開いた（%d件・ボタンの重複なし）" % cnt)
+        if cnt >= 7 and not errs and not dups: ok("実績：記録を全部開いた（%d件・ボタンの重複なし）" % cnt)
 
         # 承認待ち：未承認の新しい社員が出るか（送った記録を全部取り消した人・社員登録の合図だけの人も出す）
         pend = pg.locator("main section.sec", has_text="承認待ち・暗証番号の不一致")
@@ -224,6 +227,8 @@ with sync_playwright() as p:
                     x = pg.evaluate(DUP_JS, "main .rrow.open")
                     if x: dd.append("、".join(x))
                     pg.locator("main .rrow.open .rsum").first.click(); pg.wait_for_timeout(100)
+                ktxt = pg.inner_text("main")
+                if "最後の電話" not in ktxt or "2099" not in ktxt: bad("顧客カルテ：電話の記録（最後の電話・次の予定）が出ない")
                 if new_err(n): bad("顧客カルテ：営業記録を開くとエラー " + new_err(n))
                 elif dd: bad("顧客カルテ：営業記録の中で同じボタンが2つ以上並んでいる（%s）" % " / ".join(dd))
                 else: ok("顧客カルテ：開いた（営業記録 %d 件）" % rs.count())

@@ -2511,7 +2511,12 @@ function backupPanel(){
    集計（社員別の件数・粗利）は社長の実績画面で行う。送るのは件数の元になる事実だけで、仕入原価は送らない。 */
 const REC_FORM = "https://docs.google.com/forms/d/e/1FAIpQLScfU34FYLes3ThWx6U-yBZSgHFdPB4lSQLm2MQqi3m-JCmCUA/formResponse";
 const REC_ENTRY = "entry.1301070373";
-const REC_KINDS = [["visit","訪問"],["diag","診断"],["quote","見積"],["sample","サンプル提供"],["deal","成約"]];
+const REC_KINDS = [["call","電話"],["visit","訪問"],["diag","診断"],["quote","見積"],["sample","サンプル提供"],["deal","成約"]];
+/* 営業電話：かけた／受けた・ご担当者・結果・次の予定（日付） */
+const CALL_DIRS = [["out","かけた"],["in","受けた"]];
+const CALL_RESULTS = ["話せた","アポが取れた","折り返し待ち","不在・留守電","断られた"];
+const callDirLabel = d => (CALL_DIRS.find(x=>x[0]===d)||[])[1] || "";
+const callSummary = r => [callDirLabel(r.callDir), r.callResult, r.person ? "ご担当："+r.person : "", r.nextDate ? "次回 "+fmtDate(r.nextDate) : ""].filter(Boolean).join("　");
 const REC_LABEL = Object.fromEntries([...REC_KINDS, ["karte","顧客カルテ"], ["join","社員登録"]]);   // karte：社長から引き継いだカルテ情報（件数には数えない）。join：社員登録の合図（社長の承認待ちに出すだけ。一覧・件数には出さない）
 const REC_ME_KEY = "mogami.rec.me", REC_Q_KEY = "mogami.rec.queue", REC_LOG_KEY = "mogami.rec.log";
 function lsGet(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
@@ -2637,7 +2642,7 @@ function staffLeavePanel(){
     L.err ? h("div",{class:"banner warn"}, h("div",null, L.err)) : null,
     h("p",{class:"small muted",style:"margin:0"},"いまの社員コードは第"+STAFF_KEY.v+"版です。"));
 }
-const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", photos:[], pcode:"", detailLabel:"", reg:{name:"", pin:"", code:""}, busy:false});
+const recState = () => S.rec || (S.rec = {shop:"", kind:"", memo:"", product:"", kg:"", price:"", newDeal:"新規", detail:"", size:"", qty:"", react:"", callDir:"out", callResult:"", person:"", nextDate:"", photos:[], pcode:"", detailLabel:"", reg:{name:"", pin:"", code:""}, busy:false});
 const MEMO_MAX = 1000;
 const REC_DETAIL_MAX = 1500;
 const MEMO_PH = "話した内容：\n困っていること：\n次にやること：";
@@ -2843,6 +2848,7 @@ function recPhotos(r, code){
 }
 function recExtras(r, code){
   const bits = [];
+  if (r.kind==="call" && callSummary(r)) bits.push(h("div",{class:"small"}, "📞 "+callSummary(r)));
   if (r.qty || r.react) bits.push(h("div",{class:"small"}, [r.qty ? "量："+r.qty : "", r.react ? "反応："+r.react : ""].filter(Boolean).join("　")));
   if (r.memo) bits.push(h("div",{class:"small",style:"white-space:pre-wrap;color:var(--ink-2)"}, r.memo));
   /* 見積書の記録：明細（商品・数量・単価・金額）と合計を出し、ボタンで見積書そのものを開く（社長の実績・社員のみんなの記録で共通） */
@@ -2931,7 +2937,7 @@ function shopHint(R, me){
    中身（お店の住所・電話など）は社員コードから作った鍵で暗号化する（リンクだけでは読めない）。
    送った記録には元の記録のIDを from で残し、社員の記録が承認されたら、社長名義の元の記録は集計に入れない（二重に数えない） */
 const MV_KEY = "mogami.rec.mv";
-const MV_FIELDS = ["kind","shop","memo","detail","detailLabel","product","size","kg","price","newDeal","qty","react","quote"];
+const MV_FIELDS = ["kind","shop","memo","detail","detailLabel","product","size","kg","price","newDeal","qty","react","callDir","callResult","person","nextDate","quote"];
 const mvTok = t => { const m = String(t||"").match(/mv=([A-Za-z0-9_\-]{40,})/); return m ? m[1] : null; };
 (()=>{ try { const t = mvTok(location.hash); if (t){ lsSet(MV_KEY, t); history.replaceState(null,"",location.pathname+location.search); } } catch(e){} })();
 async function mvZip(u8, pack){
@@ -3101,6 +3107,12 @@ function recordView(){
       if (R.react) f.react = R.react;
     }
     f.memo = f.memo.slice(0, MEMO_MAX);
+    if (R.kind==="call"){
+      if (!R.callResult) return toast("電話の結果を選んでください");
+      f.callDir = R.callDir==="in" ? "in" : "out"; f.callResult = R.callResult;
+      if (String(R.person||"").trim()) f.person = String(R.person).trim().slice(0,30);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(R.nextDate||"")) f.nextDate = R.nextDate;
+    }
     if (R.kind==="deal"){
       if (!R.product) return toast("成約した商品を選んでください");
       if (!isNum(R.kg) || Number(R.kg)<=0) return toast("1回の数量（kg）を入れてください");
@@ -3134,17 +3146,17 @@ function recordView(){
     const editing = R.editing;
     const rec = editing ? await recEdit(editing, {...(editing.quote ? {quote:editing.quote} : {}), ...f}) : await recAdd(f);
     R.busy = false;
-    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を"+(editing ? "直しました" : "記録しました")); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; }
+    if (rec){ toast(f.shop+"：「"+REC_LABEL[f.kind]+"」を"+(editing ? "直しました" : "記録しました")); Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", callDir:"out", callResult:"", person:"", nextDate:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; }
     render();
   };
   const undo = async x => { if (await recAdd({kind:"cancel", ref:recRoot(x), shop:x.shop})){ if (R.editing && recRoot(R.editing)===recRoot(x)) stopEdit(); toast("取り消しました"); render(); } };
   const startEdit = x => {
     Object.assign(R, {editing:x, kind:x.kind, shop:x.shop||"", memo:x.memo||"", product:x.product||"", size:x.size||"", kg:x.kg ?? "", price:x.price ?? "",
-      newDeal:x.newDeal===false ? "既存" : "新規", qty:x.qty||"", react:x.react||"", detail:x.detail||"", detailLabel:x.detailLabel||"", photos:[], keep:[...(x.photos||[])]});
+      newDeal:x.newDeal===false ? "既存" : "新規", qty:x.qty||"", react:x.react||"", callDir:x.callDir||"out", callResult:x.callResult||"", person:x.person||"", nextDate:x.nextDate||"", detail:x.detail||"", detailLabel:x.detailLabel||"", photos:[], keep:[...(x.photos||[])]});
     render(); setTimeout(()=>{ const el = document.getElementById("rec-form"); if (el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 50);
   };
   R.startEdit = startEdit;
-  const stopEdit = () => { Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; render(); };
+  const stopEdit = () => { Object.assign(R, {kind:"", memo:"", product:"", size:"", kg:"", price:"", detail:"", newDeal:"新規", qty:"", react:"", callDir:"out", callResult:"", person:"", nextDate:"", photos:[], detailLabel:""}); R.editing = null; R.keep = []; render(); };
   return h("div",{class:"stack"},
     h("div",{class:"pagehead"}, h("h1",null,"営業記録"), h("p",null, me.name+" さん　／　今日 "+fmtDate(today()))),
     unsent ? h("div",{class:"banner warn"}, h("div",null,"まだ送れていない記録が "+unsent+" 件あります。電波の良い所で自動で送ります。 ", h("button",{class:"btn sm", onclick:()=>recFlush().then(()=>render())},"今すぐ送る"))) : null,
@@ -3158,8 +3170,16 @@ function recordView(){
         oninput:e=>{ R.shop = e.target.value; clearTimeout(R.hintT); R.hintT = setTimeout(()=>{ const el = document.getElementById("rec-shophint"); if (el) el.replaceWith(shopHint(R, me)); }, 300); }}), shops.length ? "前に記録したお店は候補に出ます" : null),
       shopHint(R, me),
       h("datalist",{id:"rec-shops"}, shops.map(x=>h("option",{value:x}))),
-      h("div",{class:"seg", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
+      h("div",{class:"seg c6", role:"radiogroup","aria-label":"記録する内容"}, REC_KINDS.map(([k,l])=>h("button",{type:"button", role:"radio","aria-checked":String(R.kind===k), onclick:()=>{ R.kind = k; render(); }}, h("b",{style:"font-size:15px"}, k==="sample" ? "サンプル" : l)))),
       R.kind==="quote" && !R.detail ? h("div",{class:"banner info"}, h("div",null,"お客様に渡す見積書を作るなら「見積書」タブへ。見積書を送ると、ここに自動で記録されます。 ", h("button",{class:"btn sm", onclick:()=>{ if (R.shop && !qtGet().shop) qtGet().shop = R.shop; go("quote"); }},"見積書を作る"))) : null,
+      R.kind==="call" ? h("div",{class:"stack",style:"gap:12px"},
+        h("div",{class:"f"}, h("span",{style:"font-size:13px;font-weight:700;color:var(--ink-2)"},"電話"),
+          h("div",{class:"seg2", role:"radiogroup","aria-label":"かけた・受けた"}, CALL_DIRS.map(([v,l])=>h("button",{type:"button", role:"radio","aria-selected":String(R.callDir===v),"aria-checked":String(R.callDir===v), onclick:()=>{ R.callDir = v; render(); }}, l)))),
+        h("div",{class:"f"}, h("span",{style:"font-size:13px;font-weight:700;color:var(--ink-2)"},"結果"),
+          h("div",{class:"react", role:"radiogroup","aria-label":"電話の結果"}, CALL_RESULTS.map(v=>h("button",{type:"button", role:"radio","aria-checked":String(R.callResult===v), onclick:()=>{ R.callResult = R.callResult===v ? "" : v; render(); }}, v)))),
+        h("div",{class:"grid2"},
+          field("ご担当者（任意）", h("input",{class:"i", id:"rec-person", placeholder:"例：店長 田中様", maxlength:30, ...bind(R,"person")})),
+          field("次の予定（任意）", h("input",{class:"i", id:"rec-next", type:"date", value:R.nextDate||"", onchange:e=>{ R.nextDate = e.target.value; }}), "次に電話・訪問する日"))) : null,
       R.kind==="sample" ? h("div",{class:"stack",style:"gap:12px"},
         h("div",{class:"grid2"},
           field("サンプルの商品（任意）", sel(R,"product",[["","選ばない"], ...prodNames.map(n=>[n,n])])),
@@ -3184,7 +3204,7 @@ function recordView(){
         h("div",{class:"m"}, h("span",null,fmtDate(x.date||x.at)), h("span",{class:"pill "+(x.kind==="deal"?"ok":"line")}, REC_LABEL[x.kind]||x.kind), x.unsent ? h("span",{class:"pill warn"},"未送信") : null, x.editedAt ? h("span",{class:"pill line"},"直した") : null,
           h("button",{class:"linkbtn", onclick:()=>startEdit(x)},"直す"),
           x.unsent ? null : h("button",{class:"linkbtn", onclick:()=>undo(x)},"取り消す")),
-        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : "")+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : "")+(x.detail ? "　📎"+(x.detailLabel||"結果") : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
+        h("div",null, h("b",null,x.shop), x.kind==="deal" ? "　"+(x.product||"")+(x.size && x.size!=="any" ? " "+x.size : "")+"　"+num(x.kg,1).replace(/\.0$/,"")+"kg × "+yen(x.price)+"/kg"+(x.newDeal===false?"（既存）":"（新規）") : (x.kind==="call" ? "　"+callSummary(x) : (x.product ? "　"+x.product : "")+(x.qty ? "　"+x.qty : "")+(x.react ? "　反応："+x.react : ""))+(x.photos && x.photos.length ? "　写真"+x.photos.length+"枚" : "")+(x.detail ? "　📎"+(x.detailLabel||"結果") : ""), x.memo ? h("div",{class:"small muted",style:"white-space:pre-wrap"},x.memo) : null))) : h("div",{class:"empty"},"まだ記録はありません。"))),
     recAllView(R, me),
     STANDALONE || S.guest ? h("details",{class:"x"}, h("summary",null,"名前・暗証番号を変える"),
       h("div",{class:"panel stack"}, h("p",{class:"small",style:"margin:0"},"登録を消して、もう一度登録します。送った記録は消えません。"),
@@ -3355,7 +3375,7 @@ async function resSendDeletes(){
    検索の入力中は画面全体を作り直さず、一覧の部分だけを書き換える（入力欄から指が離れないように） */
 const WEEK = ["日","月","火","水","木","金","土"];
 function recHay(r){
-  return normQ([r.shop, r.name, r.memo, r.product, r.size, r.qty, r.react, r.detail, r.detailLabel, REC_LABEL[r.kind], r.quote?.no, (r.photos||[]).map(p=>p && p.type).join(" ")].filter(Boolean).join(" "));
+  return normQ([r.shop, r.name, r.memo, r.product, r.size, r.qty, r.react, r.person, r.callResult, r.detail, r.detailLabel, REC_LABEL[r.kind], r.quote?.no, (r.photos||[]).map(p=>p && p.type).join(" ")].filter(Boolean).join(" "));
 }
 /* お店の名前のゆれ（空白・カタカナ/ひらがな・「様」）を吸収して、同じお店かどうかを決める */
 const shopKey = t => normQ(t).replace(/[\s・･\-ー－]/g,"").replace(/(様|さま)$/,"");
@@ -3459,6 +3479,12 @@ function karteRecSection(c){
   const staff = [...new Set(rs.map(r=>r.name).filter(Boolean))];
   return h("section",{class:"sec"}, h("h2",null,"営業記録", h("span",{class:"c"}, X.loaded ? rs.length+"件"+(staff.length ? "（"+staff.join("、")+"）" : "") : "読み込み中…")),
     h("p",{class:"small muted",style:"margin:0"},"社員が営業記録アプリで付けた、このお店の記録です（店名が同じ・ほぼ同じものをまとめています）。"),
+    (()=>{ /* 電話で約束した次の予定（今日以降で一番近いもの） */
+      const nx = rs.filter(r=>r.kind==="call" && r.nextDate && r.nextDate>=today()).sort((a,b)=>a.nextDate.localeCompare(b.nextDate))[0];
+      const last = rs.filter(r=>r.kind==="call").sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0];
+      return nx || last ? h("div",{class:"banner info"}, h("div",null,
+        last ? h("div",null,"📞 最後の電話：", fmtDate(last.date||last.at), "（"+(last.name||"")+"）　", callSummary(last)) : null,
+        nx ? h("div",null,"📅 電話で決めた次の予定：", h("b",null, fmtDate(nx.nextDate)), "（"+(nx.name||"")+"）") : null)) : null; })(),
     X.loaded ? (rs.length ? recBrowser("karte-"+c.id, rs, {empty:"このお店の記録はまだありません。", detail:resDetail}) : h("div",{class:"log"}, h("div",{class:"empty"},"このお店の記録はまだありません。")))
       : h("div",{class:"log"}, h("div",{class:"empty"},"読み込んでいます…")));
 }
@@ -3505,7 +3531,7 @@ function resultsView(){
   const rows = names.map(n=>{
     const deals = valid.filter(r=>r.name===n && r.kind==="deal");
     const g = deals.reduce((a,r)=>a+(gp[r.id]?.gp||0),0), miss = deals.filter(r=>!gp[r.id]).length;
-    return {n, visit:cnt(n,"visit"), diag:cnt(n,"diag"), quote:cnt(n,"quote"), sample:cnt(n,"sample"), deal:deals.length, newDeal:deals.filter(r=>r.newDeal!==false).length, gp:g, miss, est:deals.some(r=>gp[r.id]?.est)};
+    return {n, call:cnt(n,"call"), visit:cnt(n,"visit"), diag:cnt(n,"diag"), quote:cnt(n,"quote"), sample:cnt(n,"sample"), deal:deals.length, newDeal:deals.filter(r=>r.newDeal!==false).length, gp:g, miss, est:deals.some(r=>gp[r.id]?.est)};
   });
   const tot = k => rows.reduce((a,r)=>a+r[k],0);
   const rate = (a,b) => b ? Math.round(a/b*100)+"%" : "—";
@@ -3525,15 +3551,15 @@ function resultsView(){
     X.err ? h("div",{class:"banner warn"}, h("div",null, X.err)) : null,
     X.loaded && X.sheetCount!=null ? h("p",{class:"small muted",style:"margin:0"},"スプレッドシートの記録 "+X.sheetCount+" 件／アプリ内の記録 "+X.recs.filter(r=>r.uid).length+" 件を読み込みました。") : null,
     h("div",{class:"tabbar",role:"tablist"}, per.map(([k,l])=>h("button",{role:"tab","aria-selected":String(X.period===k), onclick:()=>{ X.period=k; render(); }}, l))),
-    h("div",{class:"kpis"}, [["訪問","visit"],["診断","diag"],["見積","quote"],["サンプル","sample"],["成約","deal"]].map(([l,k])=>h("div",{class:"kpi"}, h("div",{class:"l"},l), h("div",{class:"v"},String(tot(k)))))
+    h("div",{class:"kpis"}, [["電話","call"],["訪問","visit"],["診断","diag"],["見積","quote"],["サンプル","sample"],["成約","deal"]].map(([l,k])=>h("div",{class:"kpi"}, h("div",{class:"l"},l), h("div",{class:"v"},String(tot(k)))))
       .concat([h("div",{class:"kpi"}, h("div",{class:"l"},"獲得粗利"), h("div",{class:"v"}, yen(tot("gp"))))])),
     X.loaded && rows.length ? h("div",{class:"chartgrid"}, resDonut(rows), resFunnel(rows)) : null,
     h("div",{class:"tablewrap"}, h("table",{class:"t"},
-      h("tr",null, ["社員","訪問","診断","見積","サンプル","成約（新規）","獲得粗利","訪問→成約"].map((t,i)=>h("th",{class:i?"num":null},t))),
-      rows.length ? rows.map(r=>h("tr",null, h("td",null,r.n), h("td",{class:"num"},r.visit), h("td",{class:"num"},r.diag), h("td",{class:"num"},r.quote), h("td",{class:"num"},r.sample),
+      h("tr",null, ["社員","電話","訪問","診断","見積","サンプル","成約（新規）","獲得粗利","訪問→成約"].map((t,i)=>h("th",{class:i?"num":null},t))),
+      rows.length ? rows.map(r=>h("tr",null, h("td",null,r.n), h("td",{class:"num"},r.call), h("td",{class:"num"},r.visit), h("td",{class:"num"},r.diag), h("td",{class:"num"},r.quote), h("td",{class:"num"},r.sample),
         h("td",{class:"num"}, r.deal+"（"+r.newDeal+"）"), h("td",{class:"num"}, yen(r.gp), r.est ? h("div",{class:"small muted"},"一部サイズ不明で概算") : null, r.miss ? h("div",{class:"small",style:"color:var(--amber)"},r.miss+"件 原価未登録") : null),
         h("td",{class:"num"}, rate(r.deal, r.visit))))
-        : h("tr",null, h("td",{colspan:8, class:"muted"}, X.loading ? "読み込み中…" : "この期間の記録はまだありません。")))),
+        : h("tr",null, h("td",{colspan:9, class:"muted"}, X.loading ? "読み込み中…" : "この期間の記録はまだありません。")))),
     h("p",{class:"small muted",style:"margin:0"},"訪問→成約は、その期間の成約件数÷訪問件数です。サイズ不明の成約は、その商品で一番安いサイズの原価で計算（粗利は多めに出ます）。"),
     X.loaded ? resList() : null,
     X.loaded ? mvOwnerPanel() : null,
