@@ -66,6 +66,14 @@ MUST = [
     (r'if \(blocked\) return toast\(', "見積書の「PDFにする」が、押せない時に黙って何も起きない作りに戻っている"),
     (r'function pdfBlocked\(', "claude.ai版で保存が許可されていない時に、共有できない画面（反応しない「送る」）を出す作りに戻っている"),
 ]
+# 同じ部品を2回出していないか：「見積書を見る」（qtSnapView）は recExtras が明細の下に出す。
+# recExtras を呼ぶ画面で qtSnapView も呼ぶと、同じボタンが2つ並ぶ（2026-10 実績画面で発生）
+for body in src.split("\nfunction ")[1:]:
+    head, _, rest = body.partition("\n")
+    rest = body[body.find("{")+1:] if "{" in body else rest
+    rest = rest[:rest.find("\n}")] if "\n}" in rest else rest
+    if "recExtras(" in rest and "qtSnapView(" in rest:
+        bad("%s：recExtras と qtSnapView を両方出している（「見積書を見る」が2つ並ぶ）" % head.split("(")[0])
 for pat, msg in MUST:
     if not re.search(pat, src): bad(msg)
 for pat, msg in RULES:
