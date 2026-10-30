@@ -135,6 +135,35 @@ table.days input{min-height:38px;padding:4px 6px;font-size:14px}
 .tagline{display:flex;flex-wrap:wrap;gap:6px}
 .tg{font-size:12px;border-radius:6px;padding:1px 8px;background:var(--sunk);color:var(--ink-2)}
 .hint{font-size:12px;color:var(--muted)}
+textarea{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:72px;resize:vertical}
+textarea:focus{outline:3px solid var(--green);outline-offset:1px}
+.datebtn{font:inherit;font-weight:700;text-align:left;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 12px;min-height:48px;cursor:pointer;width:100%}
+.datebtn[aria-expanded="true"]{border-color:var(--green)}
+.cal{border:1px solid var(--line);border-radius:14px;padding:10px;background:var(--surface);display:flex;flex-direction:column;gap:6px}
+.cal .ch{display:flex;justify-content:space-between;align-items:center;font-weight:900}
+.cal .ch button{font:inherit;font-size:20px;width:44px;height:40px;border:0;border-radius:10px;background:var(--sunk);color:var(--ink);cursor:pointer}
+.cal .g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal .g .w{font-size:12px;color:var(--muted);font-weight:700}
+.cal .g .w:first-child,.cal .g .sun{color:var(--red)}
+.cal .g .sat{color:#3B6EA8}
+.cal .g button{font:inherit;font-variant-numeric:tabular-nums;border:0;background:transparent;border-radius:999px;aspect-ratio:1;max-width:100%;cursor:pointer;color:var(--ink);font-size:15px}
+.cal .g button.out{color:var(--muted);opacity:.45}
+.cal .g button.today{box-shadow:inset 0 0 0 2px var(--green)}
+.cal .g button.sel{background:var(--green);color:var(--on-green);font-weight:900}
+.cal .q{display:flex;gap:6px}
+.timepick{display:flex;align-items:center;gap:6px}
+.timepick select{width:auto;flex:1;font-size:18px;font-weight:700;text-align:center}
+.timepick span{font-weight:900;font-size:18px}
+.note{background:var(--amber-soft);border-radius:8px;padding:6px 10px;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
+.nudged{font-size:12px;color:var(--amber);font-weight:700}
+.thread{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--line);padding-top:8px}
+.cm{display:flex;flex-direction:column;background:var(--sunk);border-radius:10px;padding:6px 10px;max-width:92%}
+.cm.me{align-self:flex-end;background:var(--green-soft)}
+.cm b{font-size:12px;color:var(--ink-2)} .cm p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.cm small{font-size:11px;color:var(--muted)}
+.send{display:flex;gap:6px;align-items:flex-end}
+.send textarea{min-height:44px;flex:1}
+@media (prefers-color-scheme:dark){.cal .g .sat{color:#8FB6E8}}
 .stamps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stc{font:inherit;font-size:13px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;min-height:34px}
 .stc[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-soft);font-weight:700}
@@ -220,12 +249,12 @@ const ymd = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDa
 const hhmm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
 const mdw = s => { const [y,m,d] = s.split("-").map(Number); return m + "/" + d + "(" + WD[new Date(y, m-1, d).getDay()] + ")"; };
 function taskState(t) { const d = t.due - Date.now(); return t.done ? "fin" : d < 0 ? "late" : d < 3600e3 ? "soon" : "ok"; }
-function toast(t, ms = 2500) { const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), ms); }
+function toast(t, ms = 2500) { document.querySelectorAll(".toast").forEach(x => x.remove()); const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), ms); }
 const todayCleanFor = id => S ? S.areas.filter(a => a["d" + S.weekday] === id) : [];
 const cleanLog = aid => S && S.clean.find(c => c.area === aid);
 const cleanDeadline = a => new Date(S.today + "T" + a.deadline + ":00+09:00").getTime();
 const seriesOf = t => t.series && S.series.find(s => s.id === t.series);
-const todayNotices = () => (S.notices || []).filter(n => n.from <= S.today && n.to >= S.today);
+const todayNotices = () => (S.notices || []).filter(n => n.kind !== "メッセージ" && n.from <= S.today && n.to >= S.today);
 const awayToday = id => todayNotices().find(n => n.who === id && (n.kind === "欠勤" || n.kind === "休み"));
 const REMIND = [[0,"なし"],[5,"5分前"],[10,"10分前"],[15,"15分前"],[30,"30分前"],[60,"1時間前"],[120,"2時間前"],[180,"3時間前"],[1440,"前日（24時間前）"]];
 const STAMP = { arigato:["🙏","ありがとう"], otsukare:["💪","おつかれ！"], sugoi:["✨","すごい！"], tasukatta:["🙌","助かった"], nice:["👍","ナイス"], unagi:["🐟","うなぎのぼり！"], odaiji:["🍵","お大事に"], ryokai:["👌","了解"] };
@@ -275,6 +304,40 @@ function ruleLabel(r) {
   if (r.type === "monthly") return (n ? n + "か月ごと " : "毎月 ") + r.dom + "日";
   return "";
 }
+
+/* ---------- カレンダーと時刻（F.date のようなキーで値を出し入れ） ---------- */
+function getV(k) { const [o, f] = k.split("."); return (o === "F" ? F : N)[f]; }
+function setV(k, v) { const [o, f] = k.split("."); (o === "F" ? F : N)[f] = v; }
+const reRender = k => k.startsWith("F.") ? renderSheet() : render();
+function mdwLong(v) { const [y,m,d] = v.split("-").map(Number); const dt = new Date(y, m-1, d), t = new Date(); t.setHours(0,0,0,0);
+  const diff = Math.round((dt - t) / 864e5); return y + "年" + m + "月" + d + "日(" + WD[dt.getDay()] + ")" + (diff === 0 ? "　今日" : diff === 1 ? "　明日" : diff === -1 ? "　昨日" : ""); }
+function calField(k, label) {
+  const v = getV(k), open = ui.cal === k;
+  return `<div class="field"><label>${label}</label><button type="button" class="datebtn" data-a="cal" data-k="${k}" aria-expanded="${open}">📅 ${v ? esc(mdwLong(v)) : "日付を選ぶ"}</button>${open ? calGrid(k, v) : ""}</div>`;
+}
+function calGrid(k, v) {
+  const [y, m] = (ui.calMonth || v || ymd(new Date())).split("-").map(Number);
+  const first = new Date(y, m-1, 1), start = new Date(y, m-1, 1 - first.getDay()), tdy = ymd(new Date());
+  let cells = "";
+  for (let i = 0; i < 42; i++) { const d = new Date(start); d.setDate(start.getDate() + i); const s = ymd(d);
+    if (i === 35 && d.getMonth() !== m-1) break;
+    cells += `<button type="button" data-a="cald" data-k="${k}" data-v="${s}" class="${d.getMonth() !== m-1 ? "out " : ""}${s === tdy ? "today " : ""}${s === v ? "sel " : ""}${d.getDay() === 0 ? "sun" : d.getDay() === 6 ? "sat" : ""}" aria-label="${d.getMonth()+1}月${d.getDate()}日">${d.getDate()}</button>`; }
+  const q = [["今日",0],["明日",1],["あさって",2],["1週間後",7]].map(([l,n]) => { const d = new Date(); d.setDate(d.getDate()+n); return `<button type="button" class="btn sm" data-a="cald" data-k="${k}" data-v="${ymd(d)}">${l}</button>`; }).join("");
+  return `<div class="cal"><div class="ch"><button type="button" data-a="calm" data-k="${k}" data-v="-1" aria-label="前の月">‹</button><span>${y}年${m}月</span><button type="button" data-a="calm" data-k="${k}" data-v="1" aria-label="次の月">›</button></div>
+    <div class="g">${WD.map(w => `<span class="w">${w}</span>`).join("")}${cells}</div><div class="q">${q}</div></div>`;
+}
+function timeField(k, label) {
+  const [h, mi] = (getV(k) || "00:00").split(":");
+  return `<div class="field"><label>${label}</label><div class="timepick">
+    <select data-tk="${k}" data-part="h" aria-label="時">${Array.from({length:24}, (_,i) => `<option value="${pad(i)}"${pad(i)===h?" selected":""}>${i}時</option>`).join("")}</select><span>:</span>
+    <select data-tk="${k}" data-part="m" aria-label="分">${Array.from({length:60}, (_,i) => `<option value="${pad(i)}"${pad(i)===mi?" selected":""}>${pad(i)}分</option>`).join("")}</select></div></div>`;
+}
+function thread(target) {
+  const list = (S.comments || []).filter(c => c.target === target).sort((a,b) => a.at - b.at);
+  return `<div class="thread">${list.map(c => `<div class="cm${c.from === cfg.me ? " me" : ""}"><b>${esc(nm(c.from))}</b><p>${esc(c.text)}</p><small>${esc(fmt(c.at))}${c.from === cfg.me ? ` ・ <a href="#" data-a="cdel" data-id="${esc(c.id)}" style="color:inherit">消す</a>` : ""}</small></div>`).join("") || `<p class="hint">まだメッセージはありません。</p>`}
+    <div class="send"><textarea id="cm-${esc(target)}" maxlength="300" placeholder="メッセージを書く"></textarea><button class="btn primary sm" data-a="csend" data-id="${esc(target)}">送る</button></div></div>`;
+}
+const cCount = target => (S.comments || []).filter(c => c.target === target).length;
 
 /* ---------- 通知 ---------- */
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -393,8 +456,12 @@ function taskCard(t) {
     <div class="top"><div class="t">${esc(t.what)}</div>${pill}</div>
     <div class="meta"><span class="who-list">担当 ${whoHtml}</span></div>
     <div class="meta"><span>期限 ${esc(fmt(t.due))}</span>${t.by && !who.includes(t.by) ? `<span>${esc(nm(t.by))}さんから</span>` : ""}${t.done ? `<span>${esc(nm(t.doneBy))}が${esc(hmOnly(t.doneAt))}に完了</span>` : ""}</div>
+    ${t.note ? `<div class="note">📝 ${esc(t.note)}</div>` : ""}
     ${tags ? `<div class="tagline">${tags}</div>` : ""}
-    <div class="acts">${buttons}</div>
+    ${t.lastNudge && t.lastNudge.by && !t.done ? `<div class="nudged">📣 ${esc(nm(t.lastNudge.by))}さんが催促（${esc(fmt(t.lastNudge.at))}）</div>` : ""}
+    <div class="acts">${buttons}<button class="btn sm ghost" data-a="thr" data-id="${esc(t.id)}">💬 ${cCount(t.id) || "メッセージ"}</button></div>
+    ${ui.nudge === t.id && !shown.has("n" + t.id) && shown.add("n" + t.id) ? `<div class="send"><textarea id="ng-${esc(t.id)}" maxlength="100" placeholder="ひとこと（なくてもOK）例：急ぎでお願いします"></textarea><button class="btn primary sm" data-a="nsend" data-id="${esc(t.id)}">催促を送る</button></div>` : ""}
+    ${ui.thread === t.id && !shown.has("t" + t.id) && shown.add("t" + t.id) ? thread(t.id) : ""}
     ${t.done || (t.mode === "all" && Object.keys(t.doneMap || {}).length) ? stampRow(t.id, "work", doersOf(t)) : ""}</div>`;
 }
 function cleanCard(a) {
@@ -445,34 +512,38 @@ function viewAll() {
 }
 
 /* ---------- 画面：連絡板 ---------- */
-function newNotice() { const d = new Date(); return { kind:"欠勤", who: cfg.me, from: ymd(d), to: ymd(d), range:false, note:"", when:"now", at: ymd(d) + "T" + hhmm(new Date(Date.now() + 3600e3)), to_:"all" }; }
+function newNotice() { const d = new Date(), a = new Date(Date.now() + 3600e3); ui.cal = ""; return { kind:"欠勤", who: cfg.me, from: ymd(d), to: ymd(d), range:false, note:"", when:"now", atDate: ymd(a), atTime: hhmm(a), to_:"all", to2:[] }; }
 function viewBoard() {
   if (!N) N = null;
   const list = S.notices || [];
   const todayL = list.filter(n => n.from <= S.today), later = list.filter(n => n.from > S.today);
   const card = n => `<div class="item ${n.kind === "欠勤" || n.kind === "休み" ? "late" : n.kind === "連絡" ? "ok" : "soon"}">
-    <div class="top"><div class="t">${n.kind === "連絡" ? "📢 連絡" : "🏠 " + esc(nm(n.who)) + "さん　" + esc(n.kind)}</div><span class="pill off">${esc(n.from === n.to ? mdw(n.from) : mdw(n.from) + "〜" + mdw(n.to))}</span></div>
-    ${n.note ? `<p style="overflow-wrap:anywhere">${esc(n.note)}</p>` : ""}
-    <div class="meta"><span>登録 ${esc(nm(n.by))}</span><span>${n.notifyTo === "none" ? "通知なし" : n.sent ? (n.notifyTo === "leaders" ? "責任者に通知済み" : "全員に通知済み") : "通知予定 " + esc(fmt(n.notifyAt))}</span></div>
-    ${stampRow(n.id, n.kind === "連絡" ? "info" : n.kind === "欠勤" || n.kind === "休み" ? "away" : "info", [n.kind === "連絡" ? n.by : n.who])}
+    <div class="top"><div class="t">${n.kind === "メッセージ" ? "💬 " + esc(nm(n.by)) + " → " + String(n.to2 || "").split(",").filter(Boolean).map(w => esc(nm(w))).join("・") : n.kind === "連絡" ? "📢 連絡" : "🏠 " + esc(nm(n.who)) + "さん　" + esc(n.kind)}</div><span class="pill off">${esc(n.from === n.to ? mdw(n.from) : mdw(n.from) + "〜" + mdw(n.to))}</span></div>
+    ${n.note ? `<p style="overflow-wrap:anywhere;white-space:pre-wrap">${esc(n.note)}</p>` : ""}
+    <div class="meta"><span>登録 ${esc(nm(n.by))}</span><span>${n.notifyTo === "none" ? "通知なし" : n.sent ? (n.notifyTo === "leaders" ? "責任者に通知済み" : n.notifyTo === "to2" ? "送信済み" : "全員に通知済み") : "通知予定 " + esc(fmt(n.notifyAt))}</span></div>
+    <div class="acts"><button class="btn sm ghost" data-a="thr" data-id="${esc(n.id)}">💬 ${cCount(n.id) ? cCount(n.id) + "件" : "返信する"}</button></div>
+    ${ui.thread === n.id ? thread(n.id) : ""}
+    ${stampRow(n.id, n.kind === "連絡" || n.kind === "メッセージ" ? "info" : n.kind === "欠勤" || n.kind === "休み" ? "away" : "info", [n.who || n.by])}
     ${n.by === cfg.me || isOwner() ? `<div class="acts"><button class="btn sm ghost" data-a="ndel" data-id="${esc(n.id)}">消す</button></div>` : ""}</div>`;
   return `${pushBanner()}
-    ${N ? noticeForm() : `<button class="btn primary big" data-a="nnew">＋ 欠勤・遅刻・連絡を書く</button>`}
+    ${N ? noticeForm() : `<button class="btn primary big" data-a="nnew">＋ 欠勤・遅刻・連絡・メッセージ</button>`}
     <section class="list"><h2>今日</h2>${todayL.length ? todayL.map(card).join("") : `<div class="empty">今日の連絡はありません。</div>`}</section>
     <section class="list"><h2>これから</h2>${later.length ? later.map(card).join("") : `<div class="empty">予定の連絡はありません。</div>`}</section>`;
 }
 function noticeForm() {
-  const kinds = ["欠勤","遅刻","早退","休み","連絡"];
-  const ph = { 欠勤:"例：発熱のため", 遅刻:"例：4時に着きます", 早退:"例：6時で上がります", 休み:"例：有給休暇", 連絡:"例：明日は活鰻の入荷が1時間遅れます" }[N.kind];
+  const kinds = ["欠勤","遅刻","早退","休み","連絡","メッセージ"];
+  const isMsg = N.kind === "連絡" || N.kind === "メッセージ";
+  const ph = { 欠勤:"例：発熱のため", 遅刻:"例：4時に着きます", 早退:"例：6時で上がります", 休み:"例：有給休暇", 連絡:"例：明日は活鰻の入荷が1時間遅れます", メッセージ:"例：明日の段取りを相談させてください" }[N.kind];
   return `<form class="panel" id="noticeForm"><h2>連絡を書く</h2>
-    <div class="seg">${kinds.map(k => `<button type="button" data-a="nk" data-v="${k}" aria-pressed="${N.kind===k}">${k}</button>`).join("")}</div>
-    ${N.kind !== "連絡" ? `<div class="field"><label for="nWho">誰が</label><select id="nWho">${active().map(s => `<option value="${esc(s.id)}"${s.id===N.who?" selected":""}>${esc(s.name)}${s.id===cfg.me?"（自分）":""}</option>`).join("")}</select></div>` : ""}
-    <div class="row"><div class="field"><label for="nFrom">${N.range ? "いつから" : "日付"}</label><input id="nFrom" type="date" value="${esc(N.from)}"></div>
-    ${N.range ? `<div class="field"><label for="nTo">いつまで</label><input id="nTo" type="date" value="${esc(N.to)}"></div>` : `<div class="field"><label>&nbsp;</label><button type="button" class="btn sm" data-a="nrange">期間にする</button></div>`}</div>
-    <div class="field"><label for="nNote">${N.kind === "連絡" ? "内容" : "メモ（任意）"}</label><input id="nNote" maxlength="120" value="${esc(N.note)}" placeholder="${esc(ph)}"></div>
-    <div class="field"><label>通知</label><div class="seg"><button type="button" data-a="nw" data-v="now" aria-pressed="${N.when==="now"}">すぐ送る</button><button type="button" data-a="nw" data-v="at" aria-pressed="${N.when==="at"}">日時を指定</button><button type="button" data-a="nw" data-v="none" aria-pressed="${N.when==="none"}">送らない</button></div></div>
-    ${N.when === "at" ? `<div class="field"><label for="nAt">送る日時</label><input id="nAt" type="datetime-local" value="${esc(N.at)}"></div>` : ""}
-    ${N.when !== "none" ? `<div class="field"><label>送り先</label><div class="seg"><button type="button" data-a="nt" data-v="all" aria-pressed="${N.to_==="all"}">全員</button><button type="button" data-a="nt" data-v="leaders" aria-pressed="${N.to_==="leaders"}">責任者と社長だけ</button></div></div>` : ""}
+    <div class="seg wrap">${kinds.map(k => `<button type="button" data-a="nk" data-v="${k}" aria-pressed="${N.kind===k}">${k}</button>`).join("")}</div>
+    ${N.kind === "メッセージ" ? `<div class="field"><label>宛先（何人でも）</label><div class="chips">${active().filter(s => s.id !== cfg.me).map(s => `<button type="button" data-a="nto" data-v="${esc(s.id)}" aria-pressed="${N.to2.includes(s.id)}">${esc(s.name)}</button>`).join("")}</div><p class="hint">送った人・宛先の人・社長だけが見られます。</p></div>` : ""}
+    ${!isMsg ? `<div class="field"><label for="nWho">誰が</label><select id="nWho">${active().map(s => `<option value="${esc(s.id)}"${s.id===N.who?" selected":""}>${esc(s.name)}${s.id===cfg.me?"（自分）":""}</option>`).join("")}</select></div>` : ""}
+    ${N.kind !== "メッセージ" ? `${calField("N.from", N.range ? "いつから" : "日付")}
+    ${N.range ? calField("N.to", "いつまで") : `<button type="button" class="btn sm" data-a="nrange">期間にする（何日か続けて）</button>`}` : ""}
+    <div class="field"><label for="nNote">${isMsg ? "内容" : "メモ（任意）"}</label><textarea id="nNote" maxlength="300" placeholder="${esc(ph)}">${esc(N.note)}</textarea></div>
+    <div class="field"><label>通知</label><div class="seg"><button type="button" data-a="nw" data-v="now" aria-pressed="${N.when==="now"}">すぐ送る</button><button type="button" data-a="nw" data-v="at" aria-pressed="${N.when==="at"}">日時を指定</button>${N.kind === "メッセージ" ? "" : `<button type="button" data-a="nw" data-v="none" aria-pressed="${N.when==="none"}">送らない</button>`}</div></div>
+    ${N.when === "at" ? `${calField("N.atDate", "送る日")}${timeField("N.atTime", "送る時刻")}` : ""}
+    ${N.when !== "none" && N.kind !== "メッセージ" ? `<div class="field"><label>送り先</label><div class="seg"><button type="button" data-a="nt" data-v="all" aria-pressed="${N.to_==="all"}">全員</button><button type="button" data-a="nt" data-v="leaders" aria-pressed="${N.to_==="leaders"}">責任者と社長だけ</button></div></div>` : ""}
     <button class="btn primary big" ${busy?"disabled":""}>登録する</button>
     <button type="button" class="btn ghost" data-a="ncancel">やめる</button></form>`;
 }
@@ -487,12 +558,12 @@ function viewClean() {
 /* ---------- やることの登録・編集シート ---------- */
 function openForm(t) {
   const now = new Date(Date.now() + 3600e3);
-  if (!t) { F = { id:"", what:"", who:[cfg.me], mode:"any", date: ymd(now), time: hhmm(now), remind:0, alarm:"normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
+  if (!t) { ui.cal = ""; F = { note:"", id:"", what:"", who:[cfg.me], mode:"any", date: ymd(now), time: hhmm(now), remind:0, alarm:"normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
   else {
     const d = new Date(t.due), s = seriesOf(t), r = s && s.rule;
     let rep = "none", unit = "day";
     if (r) { if (r.every > 1) { rep = "custom"; unit = r.type === "weekly" ? "week" : r.type === "monthly" ? "month" : "day"; } else rep = r.type; }
-    F = { id:t.id, what:t.what, who:whoList(t), mode:t.mode || "any", date: ymd(d), time: hhmm(d), remind:t.remind || 0, alarm:t.alarm || "normal", rep, every: r ? r.every : 1, unit, days: r && r.days.length ? r.days.slice() : [d.getDay()], series: !!s };
+    ui.cal = ""; F = { note: t.note || "", id:t.id, what:t.what, who:whoList(t), mode:t.mode || "any", date: ymd(d), time: hhmm(d), remind:t.remind || 0, alarm:t.alarm || "normal", rep, every: r ? r.every : 1, unit, days: r && r.days.length ? r.days.slice() : [d.getDay()], series: !!s };
   }
   renderSheet();
 }
@@ -515,10 +586,12 @@ function sheetHtml() {
     <div class="field"><label for="fWhat">何を</label><input id="fWhat" maxlength="80" value="${esc(F.what)}" placeholder="例：冷蔵庫の温度記録を書く" autocomplete="off"></div>
     <div class="field"><label>誰が（何人でも選べます）</label>
       <div class="chips"><button type="button" data-a="fall" aria-pressed="${allOn}">全員</button>${all.map(s => `<button type="button" data-a="fwho" data-v="${esc(s.id)}" aria-pressed="${F.who.includes(s.id)}">${esc(s.name)}${s.id===cfg.me?"（自分）":""}</button>`).join("")}</div></div>
+    <div class="field"><label for="fNote">特記事項（任意）</label><textarea id="fNote" maxlength="300" placeholder="例：18℃を超えたら主任に連絡。冷凍庫は奥から。">${esc(F.note || "")}</textarea></div>
     ${F.who.length > 1 ? `<div class="field"><label>終わりの条件</label><div class="seg"><button type="button" data-a="fmode" data-v="any" aria-pressed="${F.mode==="any"}">誰か1人が終わればOK</button><button type="button" data-a="fmode" data-v="all" aria-pressed="${F.mode==="all"}">全員それぞれ終わる</button></div></div>` : ""}
   </form>
   <div class="panel">
-    <div class="row"><div class="field"><label for="fDate">日付</label><input id="fDate" type="date" value="${esc(F.date)}"></div><div class="field"><label for="fTime">時刻</label><input id="fTime" type="time" value="${esc(F.time)}"></div></div>
+    ${calField("F.date", "日付")}
+    ${timeField("F.time", "時刻（1分単位）")}
     <div class="chips">${[["30分後",0.5],["1時間後",1],["3時間後",3],["今日中","end"],["明日","tom"]].map(([l,v]) => `<button type="button" data-a="fq" data-v="${v}">${l}</button>`).join("")}</div>
   </div>
   <div class="panel"><div class="field"><label>繰り返し</label><div class="seg wrap">${reps.map(([k,l]) => `<button type="button" data-a="frep" data-v="${k}" aria-pressed="${F.rep===k}">${l}</button>`).join("")}</div></div>
@@ -542,6 +615,7 @@ function renderSheet() {
   if (!F) { sh.hidden = true; sh.innerHTML = ""; document.body.style.overflow = ""; return; }
   const keep = document.activeElement && document.activeElement.id;
   const what = $("#fWhat") ? $("#fWhat").value : null; if (what !== null) F.what = what;
+  if ($("#fNote")) F.note = $("#fNote").value;
   sh.innerHTML = sheetHtml(); sh.hidden = false; document.body.style.overflow = "hidden";
   if (keep && document.getElementById(keep) && sh.contains(document.getElementById(keep))) document.getElementById(keep).focus();
 }
@@ -553,7 +627,8 @@ async function saveForm() {
   const rule = formRule();
   if (rule && rule.type === "weekly" && !rule.days.length) { toast("曜日を選んでください"); return; }
   const due = new Date(F.date + "T" + F.time).getTime();
-  const body = { what: F.what, who: F.who, mode: F.mode, due, remind: Number(F.remind), alarm: F.alarm, repeat: rule || { type: "none" } };
+  if ($("#fNote")) F.note = $("#fNote").value;
+  const body = { note: (F.note || "").trim(), what: F.what, who: F.who, mode: F.mode, due, remind: Number(F.remind), alarm: F.alarm, repeat: rule || { type: "none" } };
   if (busy) return; busy = true; renderSheet();
   try {
     if (F.id) { await api("editTask", { id: F.id, ...body }); toast("保存しました"); }
@@ -616,9 +691,12 @@ const ICON = {
   clean:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-3 9"/><path d="M6 13h10l1.5 8h-13z"/><path d="M9 17v4M13 17v4"/></svg>',
   admin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>'
 };
+let shown = new Set();   // 同じやることが2か所に出る時、入力欄は最初の1か所だけに出す
 function render() {
+  shown = new Set();
   const app = $("#app"), tabs = $("#tabs"), who = $("#who"), fab = $("#fab");
-  const keep = document.activeElement && ["newStaff","nNote"].includes(document.activeElement.id) ? { id: document.activeElement.id, v: document.activeElement.value } : null;
+  const ae = document.activeElement;
+  const keep = ae && ae.id && $("#app").contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && ae.type !== "checkbox" ? { id: ae.id, v: ae.value } : null;
   if (!cfg.url || !cfg.code || !S) { tabs.hidden = true; fab.hidden = true; who.textContent = ""; app.innerHTML = viewSetup(); return; }
   if (!meObj()) { tabs.hidden = true; fab.hidden = true; who.textContent = ""; app.innerHTML = viewPick(); return; }
   who.innerHTML = `<b>${esc(meObj().name)}</b>さん`;
@@ -647,6 +725,7 @@ document.addEventListener("click", async e => {
   // フォーム（シート）
   if (a.startsWith("f") && F) {
     if ($("#fWhat")) F.what = $("#fWhat").value;
+    if ($("#fNote")) F.note = $("#fNote").value;
     if (a === "fclose") { F = null; renderSheet(); return; }
     if (a === "fwho") { F.who = F.who.includes(v) ? F.who.filter(x => x !== v) : F.who.concat(v); }
     else if (a === "fall") { const all = active().map(s => s.id); F.who = all.every(x => F.who.includes(x)) ? [cfg.me] : all; }
@@ -662,6 +741,9 @@ document.addEventListener("click", async e => {
     }
     renderSheet(); return;
   }
+  if (a === "cal") { const k = b.dataset.k; if (k.startsWith("N.")) syncNotice(); ui.cal = ui.cal === k ? "" : k; ui.calMonth = (getV(k) || ymd(new Date())).slice(0,7); reRender(k); return; }
+  if (a === "calm") { const k = b.dataset.k; const [y,m] = ui.calMonth.split("-").map(Number); const d = new Date(y, m - 1 + Number(v), 1); ui.calMonth = d.getFullYear() + "-" + pad(d.getMonth()+1); if (k.startsWith("N.")) syncNotice(); reRender(k); return; }
+  if (a === "cald") { const k = b.dataset.k; if (k.startsWith("N.")) syncNotice(); setV(k, v); if (k === "N.from" && (!N.range || N.to < v)) N.to = v; if (k === "F.date" && F.rep !== "none" && F.days.length <= 1) F.days = [new Date(v + "T00:00").getDay()]; ui.cal = ""; reRender(k); return; }
   if (a === "setup") { ui.setup = v; render(); }
   else if (a === "pick") { cfg.me = id; ls.set("genba", cfg); tab = "mine"; render(); swInit(); }
   else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; render(); }
@@ -672,7 +754,12 @@ document.addEventListener("click", async e => {
   else if (a === "stamp") { ui.pal = ""; act("stamp", { target: id, stamp: v }); }
   else if (a === "undo") act("undoTask", { id });
   else if (a === "edit") { const t = S.tasks.find(x => x.id === id); if (t) openForm(t); }
-  else if (a === "nudge") act("nudge", { id }, r => r.sent ? "催促を送りました" : "相手の通知がオフのため、届いていません");
+  else if (a === "nudge") { ui.nudge = ui.nudge === id ? "" : id; render(); const el = document.getElementById("ng-" + id); if (el) el.focus(); }
+  else if (a === "nsend") { const el = document.getElementById("ng-" + id); const msg = el ? el.value.trim() : ""; ui.nudge = ""; act("nudge", { id, msg }, r => r.sent ? "催促を送りました" : "相手の通知がオフのため、届いていません"); }
+  else if (a === "thr") { ui.thread = ui.thread === id ? "" : id; render(); }
+  else if (a === "csend") { const el = document.getElementById("cm-" + id); const text = el ? el.value.trim() : ""; if (!text) { toast("メッセージを書いてください"); return; } el.value = ""; act("comment", { target: id, text }, "送りました"); }
+  else if (a === "cdel") { e.preventDefault(); act("delComment", { id }); }
+  else if (a === "nto") { syncNotice(); N.to2 = N.to2.includes(v) ? N.to2.filter(x => x !== v) : N.to2.concat(v); render(); }
   else if (a === "stop") { if (b.dataset.sure) act("stopSeries", { id }, "繰り返しを止めました"); else { b.dataset.sure = "1"; b.textContent = "本当に止める"; } }
   else if (a === "cdone") { celebrate(); act("cleanDone", { area: id }); }
   else if (a === "cundo") act("cleanUndo", { area: id });
@@ -680,7 +767,7 @@ document.addEventListener("click", async e => {
   // 連絡板
   else if (a === "nnew") { N = newNotice(); render(); }
   else if (a === "ncancel") { N = null; render(); }
-  else if (a === "nk") { syncNotice(); N.kind = v; render(); }
+  else if (a === "nk") { syncNotice(); N.kind = v; if (v === "メッセージ" && N.when === "none") N.when = "now"; render(); }
   else if (a === "nw") { syncNotice(); N.when = v; render(); }
   else if (a === "nt") { syncNotice(); N.to_ = v; render(); }
   else if (a === "nrange") { syncNotice(); N.range = true; render(); }
@@ -697,10 +784,7 @@ document.addEventListener("click", async e => {
 function syncNotice() {
   if (!N) return;
   if ($("#nWho")) N.who = $("#nWho").value;
-  if ($("#nFrom")) N.from = $("#nFrom").value;
-  if ($("#nTo")) N.to = $("#nTo").value;
   if ($("#nNote")) N.note = $("#nNote").value;
-  if ($("#nAt")) N.at = $("#nAt").value;
 }
 document.addEventListener("input", e => {
   const el = e.target;
@@ -717,6 +801,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const el = e.target;
+  if (el.dataset && el.dataset.tk) { const k = el.dataset.tk; if (k.startsWith("N.")) syncNotice(); const [h, m] = (getV(k) || "00:00").split(":"); setV(k, el.dataset.part === "h" ? el.value + ":" + m : h + ":" + el.value); return; }
   if (el.id === "fUnit" || el.id === "fRemind") el.dispatchEvent(new Event("input", { bubbles: true }));
   else if (el.dataset && el.dataset.d !== undefined) el.dispatchEvent(new Event("input", { bubbles: true }));
 });
@@ -733,13 +818,15 @@ document.addEventListener("submit", async e => {
   if (f.id === "taskForm") { saveForm(); }
   else if (f.id === "noticeForm") {
     syncNotice();
-    if (N.kind === "連絡" && !N.note.trim()) { $("#nNote").classList.add("bad"); toast("内容を入れてください"); return; }
+    if ((N.kind === "連絡" || N.kind === "メッセージ") && !N.note.trim()) { $("#nNote").classList.add("bad"); toast("内容を入れてください"); return; }
+    if (N.kind === "メッセージ" && !N.to2.length) { toast("宛先を選んでください"); return; }
+    if (N.kind === "メッセージ") N.from = N.to = ymd(new Date());
     if (!N.from) { toast("日付を入れてください"); return; }
     let notifyAt = 0;
-    if (N.when === "at") { notifyAt = new Date(N.at).getTime(); if (!(notifyAt > Date.now())) { toast("送る日時は、今より後にしてください"); return; } }
-    const body = { kind: N.kind, who: N.kind === "連絡" ? "" : N.who, from: N.from, to: N.range ? N.to : N.from, note: N.note.trim(), notifyAt, notifyTo: N.when === "none" ? "none" : N.to_ };
+    if (N.when === "at") { notifyAt = new Date(N.atDate + "T" + N.atTime).getTime(); if (!(notifyAt > Date.now())) { toast("送る日時は、今より後にしてください"); return; } }
+    const body = { to2: N.to2, kind: N.kind, who: (N.kind === "連絡" || N.kind === "メッセージ") ? "" : N.who, from: N.from, to: N.range ? N.to : N.from, note: N.note.trim(), notifyAt, notifyTo: N.when === "none" ? "none" : N.to_ };
     if (busy) return; busy = true;
-    try { await api("addNotice", body); toast(N.when === "now" ? "登録して通知しました" : N.when === "at" ? "登録しました。指定の日時に通知します" : "登録しました"); N = null; }
+    try { await api("addNotice", body); toast(N.kind === "メッセージ" && N.when === "now" ? "メッセージを送りました" : N.when === "now" ? "登録して通知しました" : N.when === "at" ? "登録しました。指定の日時に通知します" : "登録しました"); N = null; }
     catch(x) { toast(x.message, 5000); }
     busy = false; render();
   }
@@ -808,7 +895,7 @@ function route() {
   route(); render(); swInit();
   window.addEventListener("hashchange", () => { route(); render(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
-  setInterval(() => { if (document.visibilityState === "visible" && !busy && !F && !N && !document.activeElement.matches("input,select")) refresh(true); }, 60000);
+  setInterval(() => { if (document.visibilityState === "visible" && !busy && !F && !N && !ui.nudge && !document.activeElement.matches("input,select,textarea")) refresh(true); }, 60000);
   if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.url) { history.replaceState(null, "", new URL(ev.data.url).hash || location.pathname); route(); refresh(true); } });
 })();
 </script>

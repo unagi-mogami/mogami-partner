@@ -15,11 +15,12 @@ var DAY = 864e5;
 
 var SCHEMA = {
   staff:    ["id:s", "name:s", "leader:b", "owner:b", "active:b"],
-  tasks:    ["id:s", "what:s", "who:s", "due:n", "by:s", "at:n", "done:b", "doneBy:s", "doneAt:n", "n1:n", "n2:n", "mode:s", "doneMap:j", "remind:n", "n0:n", "series:s", "alarm:s", "nrep:n"],
-  series:   ["id:s", "what:s", "who:s", "mode:s", "remind:n", "rule:j", "start:n", "last:n", "by:s", "at:n", "active:b", "alarm:s"],
+  tasks:    ["id:s", "what:s", "who:s", "due:n", "by:s", "at:n", "done:b", "doneBy:s", "doneAt:n", "n1:n", "n2:n", "mode:s", "doneMap:j", "remind:n", "n0:n", "series:s", "alarm:s", "nrep:n", "note:s", "lastNudge:j"],
+  series:   ["id:s", "what:s", "who:s", "mode:s", "remind:n", "rule:j", "start:n", "last:n", "by:s", "at:n", "active:b", "alarm:s", "note:s"],
   areas:    ["id:s", "name:s", "ord:n", "deadline:s", "d0:s", "d1:s", "d2:s", "d3:s", "d4:s", "d5:s", "d6:s"],
   cleanlog: ["key:s", "date:s", "area:s", "by:s", "at:n"],
-  notices:  ["id:s", "kind:s", "who:s", "from:s", "to:s", "note:s", "notifyAt:n", "notifyTo:s", "sent:n", "by:s", "at:n"],
+  notices:  ["id:s", "kind:s", "who:s", "from:s", "to:s", "note:s", "notifyAt:n", "notifyTo:s", "sent:n", "by:s", "at:n", "to2:s"],
+  comments: ["id:s", "target:s", "from:s", "text:s", "at:n"],
   stamps:   ["id:s", "target:s", "stamp:s", "from:s", "to:s", "at:n"],
   subs:     ["endpoint:s", "staff:s", "p256dh:s", "auth:s", "at:n", "ua:s"],
   flags:    ["key:s", "at:n"]
@@ -64,9 +65,9 @@ function handle(req) {
       case "addTask": {
         var f = taskFields(db, req);
         if (!f) return { ok: false, err: "input" };
-        var t = { id: uid(), what: f.what, who: f.who.join(","), due: f.due, by: by, at: now, done: false, doneBy: "", doneAt: 0, n1: 0, n2: 0, mode: f.mode, doneMap: {}, remind: f.remind, n0: 0, series: "", alarm: f.alarm, nrep: 0 };
+        var t = { id: uid(), what: f.what, who: f.who.join(","), due: f.due, by: by, at: now, done: false, doneBy: "", doneAt: 0, n1: 0, n2: 0, mode: f.mode, doneMap: {}, remind: f.remind, n0: 0, series: "", alarm: f.alarm, nrep: 0, note: f.note, lastNudge: {} };
         if (f.rule) {
-          var s = { id: uid(), what: f.what, who: t.who, mode: f.mode, remind: f.remind, rule: f.rule, start: f.due, last: f.due, by: by, at: now, active: true, alarm: f.alarm };
+          var s = { id: uid(), what: f.what, who: t.who, mode: f.mode, remind: f.remind, rule: f.rule, start: f.due, last: f.due, by: by, at: now, active: true, alarm: f.alarm, note: f.note };
           db.series.push(s); save(db, "series");
           t.series = s.id; t.id = s.id + "-" + f.due.toString(36);
         }
@@ -82,16 +83,16 @@ function handle(req) {
         if (!g) return { ok: false, err: "input" };
         var t2 = db.tasks[i], added = g.who.filter(function (w) { return whoList(t2).indexOf(w) < 0; });
         if (t2.due !== g.due || t2.remind !== g.remind) { t2.n0 = 0; t2.n1 = 0; t2.n2 = 0; t2.nrep = 0; }
-        t2.what = g.what; t2.who = g.who.join(","); t2.mode = g.mode; t2.due = g.due; t2.remind = g.remind; t2.alarm = g.alarm;
+        t2.what = g.what; t2.who = g.who.join(","); t2.mode = g.mode; t2.due = g.due; t2.remind = g.remind; t2.alarm = g.alarm; t2.note = g.note;
         var si = t2.series ? indexBy(db.series, "id", t2.series) : -1;
         if (si >= 0) {
           var s2 = db.series[si];
           if (!g.rule) s2.active = false;
-          else { s2.what = g.what; s2.who = t2.who; s2.mode = g.mode; s2.remind = g.remind; s2.alarm = g.alarm; s2.rule = g.rule; s2.start = g.due; s2.last = Math.max(g.due, s2.last); }
-          db.tasks.forEach(function (x) { if (x.series === s2.id && !x.done && x.id !== t2.id && g.rule) { x.what = g.what; x.who = t2.who; x.mode = g.mode; x.remind = g.remind; x.alarm = g.alarm; } });
+          else { s2.what = g.what; s2.who = t2.who; s2.mode = g.mode; s2.remind = g.remind; s2.alarm = g.alarm; s2.note = g.note; s2.rule = g.rule; s2.start = g.due; s2.last = Math.max(g.due, s2.last); }
+          db.tasks.forEach(function (x) { if (x.series === s2.id && !x.done && x.id !== t2.id && g.rule) { x.what = g.what; x.who = t2.who; x.mode = g.mode; x.remind = g.remind; x.alarm = g.alarm; x.note = g.note; } });
           save(db, "series");
         } else if (g.rule) {
-          var s3 = { id: uid(), what: g.what, who: t2.who, mode: g.mode, remind: g.remind, rule: g.rule, start: g.due, last: g.due, by: by, at: now, active: true, alarm: g.alarm };
+          var s3 = { id: uid(), what: g.what, who: t2.who, mode: g.mode, remind: g.remind, rule: g.rule, start: g.due, last: g.due, by: by, at: now, active: true, alarm: g.alarm, note: g.note };
           db.series.push(s3); save(db, "series"); t2.series = s3.id;
         }
         save(db, "tasks");
@@ -128,25 +129,52 @@ function handle(req) {
       case "nudge": {
         var n = indexBy(db.tasks, "id", req.id);
         if (n < 0) break;
-        var t4 = db.tasks[n], key = "nudge_" + t4.id, fi = indexBy(db.flags, "key", key);
+        if (!staffById(db, by)) return { ok: false, err: "input" };
+        var t4 = db.tasks[n], key = "nudge_" + t4.id + "_" + by, fi = indexBy(db.flags, "key", key);
         if (fi >= 0 && now - db.flags[fi].at < 10 * 60000) return { ok: false, err: "nudged" };
         var to = pending(t4).filter(function (w) { return w !== by; });
-        var r0 = push(db, P, to, { title: "📣 " + nameOf(db, by) + "さんから催促", body: t4.what + "（期限 " + hm(t4.due) + "）", tag: "t" + t4.id, url: APP_URL + "#task-" + t4.id });
+        var msg = clean(req.msg, 100);
+        var r0 = push(db, P, to, { title: "📣 " + nameOf(db, by) + "さんから催促：" + t4.what, body: (msg ? "「" + msg + "」 " : "") + "期限 " + when(t4.due), tag: "t" + t4.id, url: APP_URL + "#task-" + t4.id, alarm: t4.alarm === "silent" ? "normal" : t4.alarm });
         if (fi >= 0) db.flags[fi].at = now; else db.flags.push({ key: key, at: now });
-        save(db, "flags");
-        return { ok: true, sent: r0.sent, state: state(db, P) };
+        t4.lastNudge = { by: by, at: now, msg: msg };
+        if (msg) db.comments.push({ id: uid(), target: t4.id, from: by, text: "📣 " + msg, at: now });
+        save(db, "flags"); save(db, "tasks"); if (msg) save(db, "comments");
+        return { ok: true, sent: r0.sent, state: state(db, P, by) };
+      }
+
+      case "comment": {
+        var text = clean(req.text, 300), tg2 = String(req.target || "");
+        if (!text || !staffById(db, by)) return { ok: false, err: "input" };
+        var tk = indexBy(db.tasks, "id", tg2), nk = indexBy(db.notices, "id", tg2), rc = [], about2 = "";
+        if (tk >= 0) { rc = whoList(db.tasks[tk]).concat([db.tasks[tk].by]); about2 = db.tasks[tk].what; }
+        else if (nk >= 0) { var no = db.notices[nk]; rc = [no.by, no.who].concat(String(no.to2 || "").split(",")); about2 = no.kind === "連絡" || no.kind === "メッセージ" ? no.note : nameOf(db, no.who) + "さんの" + no.kind; }
+        else return { ok: false, err: "gone" };
+        db.comments.forEach(function (c) { if (c.target === tg2) rc.push(c.from); });
+        rc = rc.filter(function (w, i, arr) { return w && w !== by && staffById(db, w) && arr.indexOf(w) === i; });
+        db.comments.push({ id: uid(), target: tg2, from: by, text: text, at: now });
+        save(db, "comments");
+        push(db, P, rc, { title: "💬 " + nameOf(db, by) + "さん：" + about2.slice(0, 30), body: text, tag: "m" + tg2, url: APP_URL + (tk >= 0 ? "#task-" + tg2 : "#board") });
+        break;
+      }
+      case "delComment": {
+        var dc = indexBy(db.comments, "id", req.id);
+        if (dc >= 0 && db.comments[dc].from === by) { db.comments.splice(dc, 1); save(db, "comments"); }
+        break;
       }
 
       case "addNotice": {
-        var kind = ["欠勤", "遅刻", "早退", "休み", "連絡"].indexOf(req.kind) >= 0 ? req.kind : "連絡";
+        var kind = ["欠勤", "遅刻", "早退", "休み", "連絡", "メッセージ"].indexOf(req.kind) >= 0 ? req.kind : "連絡";
         var from = /^\d{4}-\d{2}-\d{2}$/.test(req.from || "") ? req.from : today();
         var toD = /^\d{4}-\d{2}-\d{2}$/.test(req.to || "") && req.to >= from ? req.to : from;
         var nw = String(req.who || "");
-        if (kind !== "連絡" && !staffById(db, nw)) return { ok: false, err: "input" };
-        var note = clean(req.note, 120);
-        if (kind === "連絡" && !note) return { ok: false, err: "input" };
+        var isMsg = kind === "連絡" || kind === "メッセージ";
+        if (!isMsg && !staffById(db, nw)) return { ok: false, err: "input" };
+        var note = clean(req.note, 300);
+        if (isMsg && !note) return { ok: false, err: "input" };
+        var to2 = kind === "メッセージ" ? (Array.isArray(req.to2) ? req.to2 : []).map(String).filter(function (w, i, arr) { return staffById(db, w) && arr.indexOf(w) === i; }) : [];
+        if (kind === "メッセージ" && !to2.length) return { ok: false, err: "input" };
         var na = Number(req.notifyAt) > now ? Number(req.notifyAt) : 0;
-        var nt = { id: uid(), kind: kind, who: kind === "連絡" ? "" : nw, from: from, to: toD, note: note, notifyAt: na, notifyTo: req.notifyTo === "leaders" ? "leaders" : req.notifyTo === "none" ? "none" : "all", sent: 0, by: by, at: now };
+        var nt = { id: uid(), kind: kind, to2: to2.join(","), who: isMsg ? "" : nw, from: from, to: toD, note: note, notifyAt: na, notifyTo: kind === "メッセージ" ? "to2" : req.notifyTo === "leaders" ? "leaders" : req.notifyTo === "none" ? "none" : "all", sent: 0, by: by, at: now };
         db.notices.push(nt);
         if (!na) sendNotice(db, P, nt, now);
         save(db, "notices");
@@ -163,7 +191,7 @@ function handle(req) {
         var tg = String(req.target || ""), rcpt = [], about = "";
         var ti = indexBy(db.tasks, "id", tg), ni = indexBy(db.notices, "id", tg);
         if (ti >= 0) { var tt = db.tasks[ti]; about = tt.what; rcpt = tt.mode === "all" ? Object.keys(tt.doneMap || {}) : (tt.doneBy ? [tt.doneBy] : whoList(tt)); }
-        else if (ni >= 0) { var nn = db.notices[ni]; about = nn.kind === "連絡" ? nn.note : nn.kind; rcpt = [nn.kind === "連絡" ? nn.by : nn.who]; }
+        else if (ni >= 0) { var nn = db.notices[ni]; about = nn.kind === "連絡" || nn.kind === "メッセージ" ? nn.note : nn.kind; rcpt = [nn.who || nn.by]; }
         else if (/^c:/.test(tg)) { var ci = indexBy(db.cleanlog, "key", tg.slice(2)); if (ci < 0) return { ok: false, err: "gone" }; rcpt = [db.cleanlog[ci].by]; var ar0 = db.areas[indexBy(db.areas, "id", db.cleanlog[ci].area)]; about = (ar0 ? ar0.name : "") + "の掃除"; }
         else return { ok: false, err: "gone" };
         var ex = -1;
@@ -204,7 +232,7 @@ function handle(req) {
       }
       case "testPush": {
         var r = push(db, P, [String(req.staff)], { title: "🔔 通知のテスト", body: "この通知が見えていれば設定は完了です。", tag: "test", url: APP_URL });
-        return { ok: true, sent: r.sent, failed: r.failed, state: state(db, P) };
+        return { ok: true, sent: r.sent, failed: r.failed, state: state(db, P, by) };
       }
 
       case "saveStaff": {
@@ -236,7 +264,7 @@ function handle(req) {
       }
       default: return { ok: false, err: "action" };
     }
-    return { ok: true, state: state(db, P) };
+    return { ok: true, state: state(db, P, by) };
   } finally {
     lock.releaseLock();
   }
@@ -248,7 +276,7 @@ function taskFields(db, req) {
   var who = (Array.isArray(req.who) ? req.who : String(req.who || "").split(",")).map(String).filter(function (w, i, arr) { return staffById(db, w) && arr.indexOf(w) === i; });
   if (!what || !who.length || !(due > 0)) return null;
   var remind = [0, 5, 10, 15, 30, 60, 120, 180, 1440].indexOf(Number(req.remind)) >= 0 ? Number(req.remind) : 0;
-  return { what: what, who: who, due: due, mode: req.mode === "all" && who.length > 1 ? "all" : "any", remind: remind, rule: cleanRule(req.repeat), alarm: ["normal", "repeat", "silent"].indexOf(req.alarm) >= 0 ? req.alarm : "normal" };
+  return { what: what, who: who, due: due, mode: req.mode === "all" && who.length > 1 ? "all" : "any", remind: remind, rule: cleanRule(req.repeat), note: clean(req.note, 300), alarm: ["normal", "repeat", "silent"].indexOf(req.alarm) >= 0 ? req.alarm : "normal" };
 }
 function cleanRule(r) {
   if (!r || !r.type || r.type === "none") return null;
@@ -295,7 +323,7 @@ function generate(db, now) {
       if (nx < now - 6 * 3600e3) continue;          // 長く止まっていた分は、さかのぼって出さない
       var id = s.id + "-" + nx.toString(36);
       if (indexBy(db.tasks, "id", id) >= 0) continue;
-      db.tasks.push({ id: id, what: s.what, who: s.who, due: nx, by: s.by, at: now, done: false, doneBy: "", doneAt: 0, n1: 0, n2: 0, mode: s.mode, doneMap: {}, remind: s.remind, n0: 0, series: s.id, alarm: s.alarm || "normal", nrep: 0 });
+      db.tasks.push({ id: id, what: s.what, who: s.who, due: nx, by: s.by, at: now, done: false, doneBy: "", doneAt: 0, n1: 0, n2: 0, mode: s.mode, doneMap: {}, remind: s.remind, n0: 0, series: s.id, alarm: s.alarm || "normal", nrep: 0, note: s.note || "", lastNudge: {} });
     }
   });
   return made;
@@ -324,7 +352,7 @@ function init(req, P) {
   save(db, "areas");
   var trig = true;
   try { setupTrigger(); } catch (x) { trig = false; }
-  return { ok: true, ownerId: ownerId, trigger: trig, state: state(db, P) };
+  return { ok: true, ownerId: ownerId, trigger: trig, state: state(db, P, ownerId) };
 }
 
 /** 自動チェックが動いていない時だけ、エディタでこの関数を1回実行してください */
@@ -405,6 +433,7 @@ function tick() {
       db.series = db.series.filter(function (s) { return s.active || s.at >= old; }); save(db, "series");
       db.flags = db.flags.filter(function (f) { return f.at >= now - 7 * DAY; });
       db.stamps = db.stamps.filter(function (x) { return x.at >= old; }); save(db, "stamps");
+      db.comments = db.comments.filter(function (x) { return x.at >= old; }); save(db, "comments");
       db.notices = db.notices.filter(function (nt) { return nt.to >= Utilities.formatDate(new Date(old), TZ, "yyyy-MM-dd"); }); save(db, "notices");
     }
     if (dirtyT) save(db, "tasks");
@@ -418,12 +447,12 @@ function tick() {
 function sendNotice(db, P, nt, now) {
   nt.sent = now;
   if (nt.notifyTo === "none") return;
-  var to = db.staff.filter(function (s) { return s.active && (nt.notifyTo === "all" || s.leader || s.owner); }).map(function (s) { return s.id; })
-    .filter(function (id) { return id !== nt.by && id !== nt.who; });
+  var to = (nt.notifyTo === "to2" ? String(nt.to2 || "").split(",") : db.staff.filter(function (s) { return s.active && (nt.notifyTo === "all" || s.leader || s.owner); }).map(function (s) { return s.id; }))
+    .filter(function (id) { return id && id !== nt.by && id !== nt.who; });
   var md = function (d) { var p = d.split("-"); var w = "日月火水木金土".charAt(new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()); return (+p[1]) + "/" + (+p[2]) + "(" + w + ")"; };
   var days = nt.from === nt.to ? md(nt.from) : md(nt.from) + "〜" + md(nt.to);
-  var title = nt.kind === "連絡" ? "📢 連絡（" + nameOf(db, nt.by) + "さん）" : "🏠 " + nameOf(db, nt.who) + "さん：" + nt.kind + "（" + days + "）";
-  var body = nt.kind === "連絡" ? nt.note : (nt.note || "") + (nt.by && nt.by !== nt.who ? (nt.note ? " ／ " : "") + "登録：" + nameOf(db, nt.by) + "さん" : "");
+  var title = nt.kind === "メッセージ" ? "💬 " + nameOf(db, nt.by) + "さんからメッセージ" : nt.kind === "連絡" ? "📢 連絡（" + nameOf(db, nt.by) + "さん）" : "🏠 " + nameOf(db, nt.who) + "さん：" + nt.kind + "（" + days + "）";
+  var body = nt.kind === "連絡" || nt.kind === "メッセージ" ? nt.note : (nt.note || "") + (nt.by && nt.by !== nt.who ? (nt.note ? " ／ " : "") + "登録：" + nameOf(db, nt.by) + "さん" : "");
   push(db, P, to, { title: title, body: body || "連絡板で確認してください。", tag: "n" + nt.id, url: APP_URL + "#board" });
 }
 
@@ -484,7 +513,7 @@ function sha(s) {
 }
 
 /* ---------- 画面に返す内容 ---------- */
-function state(db, P) {
+function state(db, P, viewer) {
   var now = Date.now(), recent = now - 3 * DAY, d = today();
   var notif = {};
   db.subs.forEach(function (s) { notif[s.staff] = (notif[s.staff] || 0) + 1; });
@@ -494,14 +523,22 @@ function state(db, P) {
     staff: db.staff,
     tasks: db.tasks.filter(function (t) { return !t.done || t.doneAt >= recent; }),
     series: series,
-    notices: db.notices.filter(function (nt) { return nt.to >= d; }).sort(function (a, b) { return a.from < b.from ? -1 : a.from > b.from ? 1 : a.at - b.at; }),
+    notices: db.notices.filter(function (nt) { return nt.to >= d && canSee(db, nt, viewer); }).sort(function (a, b) { return a.from < b.from ? -1 : a.from > b.from ? 1 : a.at - b.at; }),
     areas: db.areas.slice().sort(function (a, b) { return a.ord - b.ord; }),
     clean: db.cleanlog.filter(function (c) { return c.date === d; }),
     notif: notif,
+    comments: db.comments.filter(function (c) { if (c.at < now - 14 * DAY) return false; var ni = indexBy(db.notices, "id", c.target); return ni < 0 || canSee(db, db.notices[ni], viewer); }),
     stamps: db.stamps.filter(function (x) { return x.at >= now - 7 * DAY; }),
     stats: stats(db, now),
     config: { escMin: Number(P.ESC_MIN || 30), summaryTime: P.SUMMARY_TIME || "07:00", vapid: P.VAPID_PUB }
   };
+}
+
+/* メッセージは、送った人・宛先・社長だけに見せる（スプレッドシートには残ります） */
+function canSee(db, nt, viewer) {
+  if (nt.kind !== "メッセージ") return true;
+  var v = staffById(db, viewer);
+  return !!v && (v.owner || nt.by === viewer || String(nt.to2 || "").split(",").indexOf(viewer) >= 0);
 }
 
 /* この7日間のがんばり（完了数・期限内・掃除・もらったスタンプ） */
