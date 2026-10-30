@@ -135,6 +135,8 @@ table.days input{min-height:38px;padding:4px 6px;font-size:14px}
 .tagline{display:flex;flex-wrap:wrap;gap:6px}
 .tg{font-size:12px;border-radius:6px;padding:1px 8px;background:var(--sunk);color:var(--ink-2)}
 .hint{font-size:12px;color:var(--muted)}
+.check{display:flex;gap:10px;align-items:center;padding:12px;border-radius:10px;font-weight:700;cursor:pointer}
+.check input{width:24px;height:24px;min-height:0;accent-color:var(--green)}
 textarea{font:inherit;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:72px;resize:vertical}
 textarea:focus{outline:3px solid var(--green);outline-offset:1px}
 .datebtn{font:inherit;font-weight:700;text-align:left;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 12px;min-height:48px;cursor:pointer;width:100%}
@@ -294,6 +296,10 @@ function weekPanel(onlyMe) {
     <div class="rank"><span class="h">名前</span><span class="h">✅ 完了</span><span class="h">🧹 掃除</span><span class="h">💌 スタンプ</span>
     ${rows.map(r => `<span>${esc(nm(r.id))}</span><span>${r.done}</span><span>${r.clean}</span><span>${r.stamps}</span>`).join("")}</div></div>`;
 }
+const CATS = [["","なし"],["掃除","🧹 掃除"],["事務","📋 事務"],["配達","🚚 配達"],["仕込み","🔪 仕込み"],["その他","📦 その他"]];
+const catLabel = c => (CATS.find(x => x[0] === c) || ["",""])[1];
+function rotDays() { return F.rep === "weekly" ? F.days.slice().sort() : F.rep === "daily" ? [0,1,2,3,4,5,6] : F.rep === "weekdays" ? [1,2,3,4,5] : []; }
+const rotAllowed = () => ["weekly","daily","weekdays"].includes(F.rep);
 const ALARM = { normal:["ふつう","期限に1回知らせる"], repeat:["しつこく","終わるまで5分おきに3回まで"], silent:["音なし","音を鳴らさず画面に出すだけ"] };
 function ruleLabel(r) {
   if (!r) return "";
@@ -338,6 +344,20 @@ function thread(target) {
     <div class="send"><textarea id="cm-${esc(target)}" maxlength="300" placeholder="メッセージを書く"></textarea><button class="btn primary sm" data-a="csend" data-id="${esc(target)}">送る</button></div></div>`;
 }
 const cCount = target => (S.comments || []).filter(c => c.target === target).length;
+
+/* ---------- アプリを開いている時の音 ---------- */
+let actx = null;
+function unlockAudio() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch(e) {} }
+document.addEventListener("touchstart", unlockAudio, { passive: true }); document.addEventListener("click", unlockAudio);
+function chime(kind) {
+  if (kind === "silent" || !actx) return;
+  const notes = kind === "repeat" ? [880, 660, 880, 660, 880, 660] : kind === "stamp" ? [1046, 1318] : [784, 1046, 1318];
+  const t0 = actx.currentTime + 0.02, step = kind === "repeat" ? 0.22 : 0.16;
+  notes.forEach((f, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0 + i*step); g.gain.linearRampToValueAtTime(kind === "repeat" ? 0.5 : 0.35, t0 + i*step + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t0 + i*step + step*1.4);
+    o.connect(g).connect(actx.destination); o.start(t0 + i*step); o.stop(t0 + i*step + step*1.5); });
+  if (navigator.vibrate) navigator.vibrate(kind === "repeat" ? [300,120,300,120,300] : [150,80,150]);
+}
 
 /* ---------- 通知 ---------- */
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -438,7 +458,10 @@ function taskCard(t) {
   const whoHtml = t.mode === "all"
     ? who.map(w => (t.doneMap || {})[w] ? `<span class="ok">✓${esc(nm(w))}</span>` : `<span>${esc(nm(w))}</span>`).join("")
     : who.map(w => `<span>${esc(nm(w))}</span>`).join("");
+  const awayP = pend.map(awayToday).filter(Boolean);
   const tags = [
+    t.cat ? `<span class="tg">${esc(catLabel(t.cat))}</span>` : "",
+    s && s.rot && Object.keys(s.rot).length ? `<span class="tg">🔄 当番</span>` : "",
     who.length > 1 ? `<span class="tg">${t.mode === "all" ? "全員それぞれ" : "誰か1人でOK"}</span>` : "",
     s ? `<span class="tg">🔁 ${esc(ruleLabel(s.rule))}</span>` : "",
     t.remind ? `<span class="tg">🔔 ${esc((REMIND.find(r => r[0] === t.remind) || [0,""])[1])}</span>` : "",
@@ -457,6 +480,7 @@ function taskCard(t) {
     <div class="meta"><span class="who-list">担当 ${whoHtml}</span></div>
     <div class="meta"><span>期限 ${esc(fmt(t.due))}</span>${t.by && !who.includes(t.by) ? `<span>${esc(nm(t.by))}さんから</span>` : ""}${t.done ? `<span>${esc(nm(t.doneBy))}が${esc(hmOnly(t.doneAt))}に完了</span>` : ""}</div>
     ${t.note ? `<div class="note">📝 ${esc(t.note)}</div>` : ""}
+    ${!t.done && awayP.length ? `<div class="banner warn" style="padding:8px 10px">担当の${awayP.map(n => esc(nm(n.who)) + "さん（" + esc(n.kind) + "）").join("・")}は今日いません。代わりにやった人が「終わった」を押してください。</div>` : ""}
     ${tags ? `<div class="tagline">${tags}</div>` : ""}
     ${t.lastNudge && t.lastNudge.by && !t.done ? `<div class="nudged">📣 ${esc(nm(t.lastNudge.by))}さんが催促（${esc(fmt(t.lastNudge.at))}）</div>` : ""}
     <div class="acts">${buttons}<button class="btn sm ghost" data-a="thr" data-id="${esc(t.id)}">💬 ${cCount(t.id) || "メッセージ"}</button></div>
@@ -482,23 +506,26 @@ function viewMine() {
   return `${pushBanner()}${todayStrip()}
     ${myAway ? `<div class="banner ok">今日は<b>${esc(myAway.kind)}</b>で登録されています。</div>` : ""}
     <section class="list"><h2>自分のやること</h2>
-    ${cl.map(cleanCard).join("")}
     ${mine.length ? mine.map(taskCard).join("") : (cl.length ? "" : `<div class="empty">今、自分の分はありません。<br>「あとでやります」は右下の「＋ やることを追加」から登録します。</div>`)}</section>
     ${weekPanel(true)}
-    ${pushOn ? `<button class="btn ghost sm" data-a="test">テスト通知を送る</button>` : ""}`;
+    <div class="acts"><button class="btn ghost sm" data-a="sound">🔊 音を確かめる</button>${pushOn ? `<button class="btn ghost sm" data-a="test">テスト通知を送る</button>` : ""}</div>`;
 }
 
 /* ---------- 画面：みんな ---------- */
 function viewAll() {
   const open = S.tasks.filter(t => !t.done), now = Date.now();
   const endToday = new Date(); endToday.setHours(23,59,59,999);
-  const shown = ui.allFilter === "late" ? open.filter(t => t.due < now) : ui.allFilter === "today" ? open.filter(t => t.due <= endToday.getTime()) : open;
+  const catOk = t => !ui.cat || t.cat === ui.cat;
+  const shown0 = ui.allFilter === "late" ? open.filter(t => t.due < now) : ui.allFilter === "today" ? open.filter(t => t.due <= endToday.getTime()) : open;
+  const shown = shown0.filter(catOk);
+  const usedCats = CATS.filter(([k]) => k && S.tasks.some(t => t.cat === k));
   const by = {};
   shown.forEach(t => pendingOf(t).forEach(w => (by[w] = by[w] || []).push(t)));
   const people = Object.keys(by).sort((a,b) => Math.min(...by[a].map(t=>t.due)) - Math.min(...by[b].map(t=>t.due)));
   const done = S.tasks.filter(t => t.done).sort((a,b) => b.doneAt - a.doneAt);
   const cnt = f => open.filter(f).length;
   return `${todayStrip()}
+    ${usedCats.length ? `<div class="chips"><button data-a="cf" data-v="" aria-pressed="${!ui.cat}">すべての種類</button>${usedCats.map(([k,l]) => `<button data-a="cf" data-v="${k}" aria-pressed="${ui.cat===k}">${l}</button>`).join("")}</div>` : ""}
     <div class="seg"><button data-a="af" data-v="late" aria-pressed="${ui.allFilter==="late"}">期限切れ ${cnt(t=>t.due<now)}</button><button data-a="af" data-v="today" aria-pressed="${ui.allFilter==="today"}">今日 ${cnt(t=>t.due<=endToday.getTime())}</button><button data-a="af" data-v="all" aria-pressed="${ui.allFilter==="all"}">すべて ${open.length}</button></div>
     ${people.length ? people.map(id => `<section class="person"><h3><span>${esc(nm(id))}${awayToday(id) ? "（今日" + esc(awayToday(id).kind) + "）" : ""}</span><span>${by[id].length}件</span></h3>${by[id].sort((a,b)=>a.due-b.due).map(taskCard).join("")}</section>`).join("")
       : `<div class="empty">${ui.allFilter==="late" ? "期限切れはありません。" : "未完了のやることはありません。"}</div>`}
@@ -558,12 +585,12 @@ function viewClean() {
 /* ---------- やることの登録・編集シート ---------- */
 function openForm(t) {
   const now = new Date(Date.now() + 3600e3);
-  if (!t) { ui.cal = ""; F = { note:"", id:"", what:"", who:[cfg.me], mode:"any", date: ymd(now), time: hhmm(now), remind:0, alarm:"normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
+  if (!t) { ui.cal = ""; F = { cat:"", rotOn:false, rot:{}, note:"", id:"", what:"", who:[cfg.me], mode:"any", date: ymd(now), time: hhmm(now), remind:0, alarm:"normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
   else {
     const d = new Date(t.due), s = seriesOf(t), r = s && s.rule;
     let rep = "none", unit = "day";
     if (r) { if (r.every > 1) { rep = "custom"; unit = r.type === "weekly" ? "week" : r.type === "monthly" ? "month" : "day"; } else rep = r.type; }
-    ui.cal = ""; F = { note: t.note || "", id:t.id, what:t.what, who:whoList(t), mode:t.mode || "any", date: ymd(d), time: hhmm(d), remind:t.remind || 0, alarm:t.alarm || "normal", rep, every: r ? r.every : 1, unit, days: r && r.days.length ? r.days.slice() : [d.getDay()], series: !!s };
+    ui.cal = ""; F = { cat: t.cat || "", rotOn: !!(s && s.rot && Object.keys(s.rot).length), rot: s && s.rot ? { ...s.rot } : {}, note: t.note || "", id:t.id, what:t.what, who:whoList(t), mode:t.mode || "any", date: ymd(d), time: hhmm(d), remind:t.remind || 0, alarm:t.alarm || "normal", rep, every: r ? r.every : 1, unit, days: r && r.days.length ? r.days.slice() : [d.getDay()], series: !!s };
   }
   renderSheet();
 }
@@ -584,10 +611,11 @@ function sheetHtml() {
   return `<div class="in"><div class="head"><h2>${F.id ? "やることを編集" : "やることを追加"}</h2><button class="btn sm ghost" data-a="fclose">閉じる</button></div>
   <form class="panel" id="taskForm">
     <div class="field"><label for="fWhat">何を</label><input id="fWhat" maxlength="80" value="${esc(F.what)}" placeholder="例：冷蔵庫の温度記録を書く" autocomplete="off"></div>
-    <div class="field"><label>誰が（何人でも選べます）</label>
-      <div class="chips"><button type="button" data-a="fall" aria-pressed="${allOn}">全員</button>${all.map(s => `<button type="button" data-a="fwho" data-v="${esc(s.id)}" aria-pressed="${F.who.includes(s.id)}">${esc(s.name)}${s.id===cfg.me?"（自分）":""}</button>`).join("")}</div></div>
+    <div class="field"><label>種類</label><div class="chips">${CATS.map(([k,l]) => `<button type="button" data-a="fcat" data-v="${k}" aria-pressed="${F.cat===k}">${l}</button>`).join("")}</div></div>
+    ${F.rotOn && rotAllowed() ? `<p class="hint">担当は下の「当番表」で曜日ごとに決めます。</p>` : `<div class="field"><label>誰が（何人でも選べます）</label>
+      <div class="chips"><button type="button" data-a="fall" aria-pressed="${allOn}">全員</button>${all.map(s => `<button type="button" data-a="fwho" data-v="${esc(s.id)}" aria-pressed="${F.who.includes(s.id)}">${esc(s.name)}${s.id===cfg.me?"（自分）":""}</button>`).join("")}</div></div>`}
     <div class="field"><label for="fNote">特記事項（任意）</label><textarea id="fNote" maxlength="300" placeholder="例：18℃を超えたら主任に連絡。冷凍庫は奥から。">${esc(F.note || "")}</textarea></div>
-    ${F.who.length > 1 ? `<div class="field"><label>終わりの条件</label><div class="seg"><button type="button" data-a="fmode" data-v="any" aria-pressed="${F.mode==="any"}">誰か1人が終わればOK</button><button type="button" data-a="fmode" data-v="all" aria-pressed="${F.mode==="all"}">全員それぞれ終わる</button></div></div>` : ""}
+    ${F.who.length > 1 && !(F.rotOn && rotAllowed()) ? `<div class="field"><label>終わりの条件</label><div class="seg"><button type="button" data-a="fmode" data-v="any" aria-pressed="${F.mode==="any"}">誰か1人が終わればOK</button><button type="button" data-a="fmode" data-v="all" aria-pressed="${F.mode==="all"}">全員それぞれ終わる</button></div></div>` : ""}
   </form>
   <div class="panel">
     ${calField("F.date", "日付")}
@@ -599,6 +627,8 @@ function sheetHtml() {
     ${F.rep === "monthly" ? `<p class="hint">毎月${d.getDate()}日の${esc(F.time)}に出ます（その日がない月は月末）。</p>` : ""}
     ${F.rep === "custom" ? `<div class="field"><label>間隔</label><div class="inline"><input id="fEvery" type="number" min="1" max="99" value="${esc(F.every)}" style="max-width:90px"><select id="fUnit"><option value="day"${F.unit==="day"?" selected":""}>日ごと</option><option value="week"${F.unit==="week"?" selected":""}>週ごと</option><option value="month"${F.unit==="month"?" selected":""}>か月ごと</option></select></div></div>
       ${F.unit === "week" ? `<div class="field"><label>曜日（複数OK）</label>${wdPick}</div>` : ""}${F.unit === "month" ? `<p class="hint">${d.getDate()}日に出ます。</p>` : ""}` : ""}
+    ${rotAllowed() ? `<label class="check" style="background:var(--sunk)"><input type="checkbox" id="fRotOn" ${F.rotOn ? "checked" : ""}> 曜日ごとに担当を変える（当番表）</label>
+      ${F.rotOn ? `<div class="list">${rotDays().map(d => `<div class="inline"><b style="width:2.5em">${WD[d]}曜</b><select data-rot="${d}" aria-label="${WD[d]}曜の担当"><option value="">― 選ぶ</option>${all.map(s => `<option value="${esc(s.id)}"${F.rot[d]===s.id?" selected":""}>${esc(s.name)}</option>`).join("")}</select></div>`).join("") || `<p class="hint">先に曜日を選んでください。</p>`}</div>` : ""}` : ""}
     ${F.rep !== "none" ? `<p class="hint">次の回は、期限の12時間前に自動で出てきます。${F.series ? "変更は、これから先の回にも反映されます。" : ""}</p>` : ""}
   </div>
   <div class="panel">
@@ -622,17 +652,20 @@ function renderSheet() {
 async function saveForm() {
   F.what = $("#fWhat").value.trim();
   if (!F.what) { $("#fWhat").classList.add("bad"); toast("「何を」を入れてください"); return; }
-  if (!F.who.length) { toast("担当を1人以上選んでください"); return; }
+  const useRot = F.rotOn && rotAllowed();
+  if (useRot) { const miss = rotDays().filter(d => !F.rot[d]); if (!rotDays().length || miss.length) { toast("当番表で" + miss.map(d => WD[d]).join("・") + "曜の担当を選んでください", 4000); return; } }
+  else if (!F.who.length) { toast("担当を1人以上選んでください"); return; }
   if (!F.date || !F.time) { toast("日付と時刻を入れてください"); return; }
   const rule = formRule();
   if (rule && rule.type === "weekly" && !rule.days.length) { toast("曜日を選んでください"); return; }
   const due = new Date(F.date + "T" + F.time).getTime();
   if ($("#fNote")) F.note = $("#fNote").value;
-  const body = { note: (F.note || "").trim(), what: F.what, who: F.who, mode: F.mode, due, remind: Number(F.remind), alarm: F.alarm, repeat: rule || { type: "none" } };
+  const rot = useRot ? Object.fromEntries(rotDays().map(d => [d, F.rot[d]])) : null;
+  const body = { cat: F.cat, rot, note: (F.note || "").trim(), what: F.what, who: useRot ? Object.values(rot) : F.who, mode: F.mode, due, remind: Number(F.remind), alarm: F.alarm, repeat: rule || { type: "none" } };
   if (busy) return; busy = true; renderSheet();
   try {
     if (F.id) { await api("editTask", { id: F.id, ...body }); toast("保存しました"); }
-    else { await api("addTask", body); const others = F.who.filter(w => w !== cfg.me); toast(others.length ? others.map(nm).join("・") + "さんに知らせました" : "登録しました"); }
+    else { await api("addTask", body); const others = (useRot ? [] : F.who).filter(w => w !== cfg.me); toast(others.length ? others.map(nm).join("・") + "さんに知らせました" : "登録しました"); }
     F = null;
   } catch(e) { toast(e.message, 5000); }
   busy = false; renderSheet(); render();
@@ -668,12 +701,7 @@ function viewAdmin() {
     <form class="acts" id="staffAdd"><input id="newStaff" placeholder="名前を追加" autocomplete="off" style="flex:1"><button class="btn sm">追加</button></form>
     <button class="btn primary" data-a="saveStaff" ${adm.dirtyS && !busy ? "" : "disabled"}>社員の変更を保存</button></div>
 
-  <div class="panel"><h2>掃除の場所・期限・曜日ごとの担当</h2>
-    <div class="grid"><table class="days"><tr><th>場所</th><th>期限</th>${WD.map((w,i) => `<th${i===S.weekday?' style="color:var(--green)"':""}>${w}</th>`).join("")}<th></th></tr>
-    ${adm.areas.map((a,k) => `<tr><td><input data-ar="${k}" data-f="name" value="${esc(a.name)}" style="min-width:84px"></td><td><input type="time" data-ar="${k}" data-f="deadline" value="${esc(a.deadline)}"></td>
-      ${a.days.map((v,i) => `<td><select data-ar="${k}" data-d="${i}" aria-label="${esc(a.name)} ${WD[i]}曜">${opts(v)}</select></td>`).join("")}<td><button class="toggle" data-a="ax" data-k="${k}" aria-label="${esc(a.name)}を消す">✕</button></td></tr>`).join("")}</table></div>
-    <div class="acts"><button class="btn sm" data-a="aadd">＋ 場所を追加</button></div>
-    <button class="btn primary" data-a="saveAreas" ${adm.dirtyA && !busy ? "" : "disabled"}>掃除当番を保存</button></div>
+  <div class="banner ok">掃除当番は「やること」にまとめました。「＋ やることを追加」で種類を🧹掃除にして、繰り返し＋「曜日ごとに担当を変える」で当番表を作れます。</div>
 
   <form class="panel" id="cfgForm"><h2>通知のタイミング</h2>
     <div class="row"><div class="field"><label for="cEsc">責任者に知らせるまで（分）</label><input id="cEsc" type="number" min="5" max="240" value="${esc(adm.escMin)}"></div>
@@ -704,7 +732,7 @@ function render() {
   const myLate = S.tasks.filter(t => !t.done && pendingOf(t).includes(cfg.me) && t.due < now).length + todayCleanFor(cfg.me).filter(a => !cleanLog(a.id) && now > cleanDeadline(a)).length;
   const allLate = S.tasks.filter(t => !t.done && t.due < now).length;
   const cleanLeft = S.areas.filter(a => a["d"+S.weekday] && !cleanLog(a.id)).length;
-  const T = [["mine","自分",myLate],["all","みんな",allLate],["board","連絡",todayNotices().length],["clean","掃除",cleanLeft]].concat(isOwner() ? [["admin","管理",0]] : []);
+  const T = [["mine","自分",myLate],["all","みんな",allLate],["board","連絡",todayNotices().length]].concat(isOwner() ? [["admin","管理",0]] : []);
   if (tab === "admin" && !isOwner()) tab = "mine";
   tabs.hidden = false;
   tabs.innerHTML = T.map(([k,l,n]) => `<button data-tab="${k}" ${tab===k?'aria-current="page"':""}>${ICON[k]}${l}${n ? `<span class="dot">${n}</span>` : ""}</button>`).join("");
@@ -730,6 +758,7 @@ document.addEventListener("click", async e => {
     if (a === "fwho") { F.who = F.who.includes(v) ? F.who.filter(x => x !== v) : F.who.concat(v); }
     else if (a === "fall") { const all = active().map(s => s.id); F.who = all.every(x => F.who.includes(x)) ? [cfg.me] : all; }
     else if (a === "fmode") F.mode = v;
+    else if (a === "fcat") F.cat = v;
     else if (a === "fq") { const d = new Date(); if (v === "end") d.setHours(23,59,0,0); else if (v === "tom") d.setDate(d.getDate()+1); else d.setTime(d.getTime() + Number(v)*3600e3); F.date = ymd(d); F.time = hhmm(d); if (!F.days.length) F.days = [d.getDay()]; }
     else if (a === "frep") { F.rep = v; if ((v === "weekly" || v === "custom") && !F.days.length) F.days = [new Date(F.date + "T00:00").getDay()]; }
     else if (a === "fd") { const n = Number(v); F.days = F.days.includes(n) ? F.days.filter(x => x !== n) : F.days.concat(n); }
@@ -749,6 +778,7 @@ document.addEventListener("click", async e => {
   else if (a === "reset") { cfg = {}; ls.set("genba", cfg); S = null; render(); }
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
+  else if (a === "sound") { unlockAudio(); setTimeout(() => chime("normal"), 60); toast("アプリを開いている時は、この音が鳴ります。閉じている時はスマホの通知音です", 5000); }
   else if (a === "done") { celebrate(); act("doneTask", { id }); }
   else if (a === "stp") { ui.pal = ui.pal === id ? "" : id; render(); }
   else if (a === "stamp") { ui.pal = ""; act("stamp", { target: id, stamp: v }); }
@@ -764,6 +794,7 @@ document.addEventListener("click", async e => {
   else if (a === "cdone") { celebrate(); act("cleanDone", { area: id }); }
   else if (a === "cundo") act("cleanUndo", { area: id });
   else if (a === "af") { ui.allFilter = v; render(); }
+  else if (a === "cf") { ui.cat = v; render(); }
   // 連絡板
   else if (a === "nnew") { N = newNotice(); render(); }
   else if (a === "ncancel") { N = null; render(); }
@@ -789,6 +820,8 @@ function syncNotice() {
 document.addEventListener("input", e => {
   const el = e.target;
   if (F && el.closest("#sheet")) {
+    if (el.id === "fRotOn") { F.rotOn = el.checked; renderSheet(); return; }
+    if (el.dataset.rot !== undefined) { F.rot[el.dataset.rot] = el.value; return; }
     if (el.id === "fDate") F.date = el.value;
     if (el.id === "fTime") F.time = el.value;
     if (el.id === "fRemind") F.remind = Number(el.value);
@@ -802,7 +835,8 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const el = e.target;
   if (el.dataset && el.dataset.tk) { const k = el.dataset.tk; if (k.startsWith("N.")) syncNotice(); const [h, m] = (getV(k) || "00:00").split(":"); setV(k, el.dataset.part === "h" ? el.value + ":" + m : h + ":" + el.value); return; }
-  if (el.id === "fUnit" || el.id === "fRemind") el.dispatchEvent(new Event("input", { bubbles: true }));
+  if (el.id === "fRotOn" || (el.dataset && el.dataset.rot !== undefined)) el.dispatchEvent(new Event("input", { bubbles: true }));
+  else if (el.id === "fUnit" || el.id === "fRemind") el.dispatchEvent(new Event("input", { bubbles: true }));
   else if (el.dataset && el.dataset.d !== undefined) el.dispatchEvent(new Event("input", { bubbles: true }));
 });
 async function adminSave(action, body, msg) {
@@ -881,7 +915,7 @@ async function join(url, code) {
 function route() {
   const h = location.hash;
   if (h.startsWith("#task-")) { flashId = h.slice(6); const t = S && S.tasks.find(x => x.id === flashId); tab = t && !pendingOf(t).includes(cfg.me) ? "all" : "mine"; if (t && tab === "all") ui.allFilter = "all"; }
-  else if (h === "#clean") tab = "clean";
+  else if (h === "#clean") { tab = "all"; ui.cat = "掃除"; ui.allFilter = "all"; }
   else if (h === "#board") tab = "board";
   else if (h === "#all") { tab = "all"; }
 }
@@ -896,7 +930,7 @@ function route() {
   window.addEventListener("hashchange", () => { route(); render(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
   setInterval(() => { if (document.visibilityState === "visible" && !busy && !F && !N && !ui.nudge && !document.activeElement.matches("input,select,textarea")) refresh(true); }, 60000);
-  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.url) { history.replaceState(null, "", new URL(ev.data.url).hash || location.pathname); route(); refresh(true); } });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.type === "push") { chime(ev.data.alarm); toast(ev.data.title, 4000); refresh(true); return; } if (ev.data && ev.data.url) { history.replaceState(null, "", new URL(ev.data.url).hash || location.pathname); route(); refresh(true); } });
 })();
 </script>
 </body>

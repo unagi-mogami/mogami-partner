@@ -7,7 +7,9 @@ self.addEventListener("push", e => {
   try { m = e.data ? e.data.json() : {}; } catch (x) { m = { body: e.data ? e.data.text() : "" }; }
   const title = m.title || "現場ノート";
   const alarm = m.alarm || "normal";            // normal＝ふつう / repeat＝しつこく / silent＝音なし
-  e.waitUntil(self.registration.showNotification(title, {
+  // アプリを開いている時は、画面側でも音を鳴らす
+  const tell = self.clients.matchAll({ type: "window" }).then(list => list.forEach(c => c.postMessage({ type: "push", title, alarm })));
+  e.waitUntil(Promise.all([tell, self.registration.showNotification(title, {
     body: m.body || "開いて確認してください。",
     tag: m.tag || undefined,
     renotify: !!m.tag && alarm !== "silent",
@@ -17,7 +19,7 @@ self.addEventListener("push", e => {
     icon: "icon-192.png",
     badge: "icon-192.png",
     data: { url: m.url || self.registration.scope }
-  }));
+  })]));
 });
 
 self.addEventListener("notificationclick", e => {
