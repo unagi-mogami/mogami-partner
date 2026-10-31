@@ -590,7 +590,7 @@ function state(db, P, viewer) {
     notif: notif,
     comments: db.comments.filter(function (c) { if (c.at < now - 14 * DAY) return false; var ni = indexBy(db.notices, "id", c.target); return ni < 0 || canSee(db, db.notices[ni], viewer); }),
     stamps: db.stamps.filter(function (x) { return x.at >= now - 7 * DAY; }),
-    stats: stats(db, now),
+    stats: stats(db, now), statsP: statsAll(db, now),
     config: { escMin: Number(P.ESC_MIN || 30), summaryTime: P.SUMMARY_TIME || "07:00", vapid: P.VAPID_PUB }
   };
 }
@@ -603,18 +603,24 @@ function canSee(db, nt, viewer) {
 }
 
 /* この7日間のがんばり（完了数・期限内・掃除・もらったスタンプ） */
-function stats(db, now) {
-  var w = now - 7 * DAY, out = {};
-  var get = function (id) { return out[id] || (out[id] = { done: 0, ontime: 0, clean: 0, stamps: 0 }); };
+function stats(db, now, since) {
+  var w = since || now - 7 * DAY, out = {};
+  var get = function (id) { return out[id] || (out[id] = { done: 0, ontime: 0, clean: 0, stamps: 0, asked: 0, late: 0, open: 0 }); };
   db.tasks.forEach(function (t) {
     var dm = t.doneMap || {};
     var col = t.cat === "掃除" ? "clean" : "done";
-    if (t.mode === "all") Object.keys(dm).forEach(function (k) { if (dm[k] >= w) { get(k)[col]++; if (col === "done" && dm[k] <= t.due) get(k).ontime++; } });
-    else if (t.done && t.doneAt >= w && t.doneBy) { get(t.doneBy)[col]++; if (col === "done" && t.doneAt <= t.due) get(t.doneBy).ontime++; }
+    if (t.mode === "all") Object.keys(dm).forEach(function (k) { if (dm[k] >= w) { get(k)[col]++; if (dm[k] <= t.due) get(k).ontime++; } });
+    else if (t.done && t.doneAt >= w && t.doneBy) { get(t.doneBy)[col]++; if (t.doneAt <= t.due) get(t.doneBy).ontime++; }
+    if (t.at >= w && t.by && !t.series && whoList(t).some(function (x) { return x !== t.by; })) get(t.by).asked++;
+    if (!t.done) pending(t).forEach(function (k) { get(k).open++; if (t.due < now) get(k).late++; });
   });
   db.cleanlog.forEach(function (c) { if (c.at >= w && c.by) get(c.by).clean++; });
   db.stamps.forEach(function (x) { if (x.at >= w && x.to && x.to !== x.from) get(x.to).stamps++; });
   return out;
+}
+function statsAll(db, now) {
+  var d0 = at(today(), "00:00");
+  return { d1: stats(db, now, d0), d7: stats(db, now, now - 7 * DAY), d30: stats(db, now, now - 30 * DAY) };
 }
 
 /* ---------- スプレッドシートの読み書き ---------- */

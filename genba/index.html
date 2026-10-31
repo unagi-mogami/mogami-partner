@@ -217,6 +217,15 @@ textarea:focus{outline:3px solid var(--green);outline-offset:1px}
 .stpop .sl{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto}
 .stpop .si{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-weight:700}
 .stpop .si:last-child{border-bottom:0}
+.srow{gap:6px;padding:12px 14px}
+.srow .top{display:flex;justify-content:space-between;align-items:baseline}
+.srow .nm{font-size:17px}
+.srow .big2{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums}
+.srow .big2 small{font-size:12px;color:var(--muted);margin-left:2px}
+.bar{height:10px;border-radius:999px;background:var(--sunk);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--green);border-radius:999px}
+.nums{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.nums .lt{color:var(--red);font-weight:700}
 .stamps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stc{font:inherit;font-size:13px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;min-height:34px}
 .stc[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-soft);font-weight:700}
@@ -727,7 +736,36 @@ function viewMine() {
 }
 
 /* ---------- 画面：みんな ---------- */
+const allSwitch = () => `<div class="seg"><button data-a="av" data-v="tasks" aria-pressed="${ui.allView !== "stats"}">📋 残っているやること</button><button data-a="av" data-v="stats" aria-pressed="${ui.allView === "stats"}">📊 がんばり表</button></div>`;
+function viewStats() {
+  const per = ui.per || "d7";
+  const data = (S.statsP && S.statsP[per]) || (per === "d7" ? S.stats : null) || {};
+  const ids = active().map(s => s.id);
+  const z = { done: 0, ontime: 0, clean: 0, stamps: 0, asked: 0, late: 0, open: 0 };
+  const rows = ids.map(id => ({ id, ...z, ...(data[id] || {}) })).map(r => ({ ...r, total: r.done + r.clean }))
+    .sort((a, b) => b.total - a.total || b.stamps - a.stamps || a.late - b.late);
+  const sum = k => rows.reduce((x, r) => x + (r[k] || 0), 0);
+  const total = sum("total"), max = Math.max(1, ...rows.map(r => r.total));
+  const king = rows.slice().sort((a, b) => b.stamps - a.stamps)[0];
+  const medal = i => rows[i].total ? ["🥇","🥈","🥉"][i] || "" : "";
+  const label = { d1: "今日", d7: "この7日間", d30: "この30日間" }[per];
+  return `${allSwitch()}
+  <div class="seg"><button data-a="per" data-v="d1" aria-pressed="${per === "d1"}">今日</button><button data-a="per" data-v="d7" aria-pressed="${per === "d7"}">7日</button><button data-a="per" data-v="d30" aria-pressed="${per === "d30"}">30日</button></div>
+  ${!S.statsP && per !== "d7" ? `<div class="banner warn">「今日」「30日」を見るには、受付係を最新版に更新してください。</div>` : ""}
+  <div class="panel week"><h2>みんなの${label}</h2>
+    <div class="big"><div><b>${total}</b><span>終わらせた数</span></div><div><b>${total ? Math.round(sum("ontime") / total * 100) + "%" : "–"}</b><span>期限内に完了</span></div><div><b>${sum("stamps")}</b><span>送り合ったスタンプ</span></div></div>
+    ${rows[0] && rows[0].total ? `<div class="king">🏃 一番終わらせた人：${esc(av(rows[0].id) + nm(rows[0].id))}さん（${rows[0].total}件）</div>` : ""}
+    ${king && king.stamps ? `<div class="king">👑 ありがとうを一番もらった人：${esc(av(king.id) + nm(king.id))}さん（${king.stamps}個）</div>` : ""}
+  </div>
+  <section class="list">${rows.map((r, i) => `<div class="panel srow">
+    <div class="top"><b class="nm">${medal(i)} ${esc(av(r.id) + nm(r.id))}</b><span class="big2">${r.total}<small>件</small></span></div>
+    <div class="bar"><span style="width:${Math.round(r.total / max * 100)}%"></span></div>
+    <div class="nums"><span>✅ やること ${r.done}</span><span>🧹 掃除 ${r.clean}</span><span>⏱ 期限内 ${r.total ? Math.round(r.ontime / r.total * 100) + "%" : "–"}</span><span>💌 スタンプ ${r.stamps}</span><span>📝 頼んだ ${r.asked}</span>
+      <span class="${r.late ? "lt" : ""}">📌 残り ${r.open}${r.late ? `（遅れ ${r.late}）` : ""}</span></div></div>`).join("")}</section>
+  <p class="hint">「終わらせた数」は、期間の中で「終わった」を押した数です。「残り」は今の未完了の数です。</p>`;
+}
 function viewAll() {
+  if (ui.allView === "stats") return viewStats();
   const open = S.tasks.filter(t => !t.done), now = Date.now();
   const endToday = new Date(); endToday.setHours(23,59,59,999);
   const catOk = t => !ui.cat || t.cat === ui.cat;
@@ -739,7 +777,7 @@ function viewAll() {
   const people = Object.keys(by).sort((a,b) => Math.min(...by[a].map(t=>t.due)) - Math.min(...by[b].map(t=>t.due)));
   const done = S.tasks.filter(t => t.done).sort((a,b) => b.doneAt - a.doneAt);
   const cnt = f => open.filter(f).length;
-  return `${todayStrip()}
+  return `${allSwitch()}${todayStrip()}
     ${usedCats.length ? `<div class="chips"><button data-a="cf" data-v="" aria-pressed="${!ui.cat}">すべての種類</button>${usedCats.map(([k,l]) => `<button data-a="cf" data-v="${k}" aria-pressed="${ui.cat===k}">${l}</button>`).join("")}</div>` : ""}
     <div class="seg"><button data-a="af" data-v="late" aria-pressed="${ui.allFilter==="late"}">期限切れ ${cnt(t=>t.due<now)}</button><button data-a="af" data-v="today" aria-pressed="${ui.allFilter==="today"}">今日 ${cnt(t=>t.due<=endToday.getTime())}</button><button data-a="af" data-v="all" aria-pressed="${ui.allFilter==="all"}">すべて ${open.length}</button></div>
     ${people.length ? people.map(id => `<section class="person"><h3><span>${esc(av(id) + nm(id))}${(staff(id) || {}).bio ? `<small style="font-weight:500;letter-spacing:0;margin-left:6px">「${esc(staff(id).bio)}」</small>` : ""}${awayToday(id) ? "（今日" + esc(awayToday(id).kind) + "）" : ""}</span><span>${by[id].length}件</span></h3>${by[id].sort((a,b)=>a.due-b.due).map(taskCard).join("")}</section>`).join("")
@@ -750,7 +788,7 @@ function viewAll() {
         <div class="acts"><button class="btn sm danger" data-a="stop" data-id="${esc(s.id)}">繰り返しを止める</button></div></div>`).join("") : `<div class="empty">繰り返しのやることはありません</div>`}</div></details>
     <section class="list"><h2>最近終わったもの <span class="muted small">スタンプを送ろう</span></h2>${done.slice(0, 8).map(taskCard).join("") || `<div class="empty">まだありません</div>`}</section>
     ${done.length > 8 ? `<details><summary class="muted" style="font-weight:700;cursor:pointer">もっと見る（${done.length - 8}）</summary><div class="list" style="margin-top:10px">${done.slice(8).map(taskCard).join("")}</div></details>` : ""}
-    ${weekPanel(false)}`;
+    <button class="btn big" data-a="av" data-v="stats">📊 がんばり表を見る（誰がどのくらいやったか）</button>`;
 }
 
 /* ---------- 画面：当番表 ---------- */
@@ -1012,7 +1050,7 @@ function render() {
   if (tab === "admin" && !isOwner()) tab = "mine";
   tabs.hidden = false;
   tabs.innerHTML = T.map(([k,l,n]) => `<button data-tab="${k}" ${tab===k?'aria-current="page"':""}>${ICON[k]}${l}${n ? `<span class="dot">${n}</span>` : ""}</button>`).join("");
-  fab.hidden = !(tab === "mine" || tab === "all");
+  fab.hidden = !(tab === "mine" || (tab === "all" && ui.allView !== "stats"));
   if (N && $("#nNote")) N.note = $("#nNote").value;
   app.innerHTML = tab === "mine" ? viewMine() : tab === "all" ? viewAll() : tab === "board" ? viewBoard() : tab === "duty" ? viewDuty() : viewAdmin();
   if (keep && $("#" + keep.id)) { const el = $("#" + keep.id); el.value = keep.v; el.focus(); }
@@ -1086,6 +1124,8 @@ document.addEventListener("click", async e => {
   else if (a === "dset") { const day = Number(b.dataset.day); ui.pick = null; act("setRotDay", { id, day, who: v }, v ? WD[day] + "曜を" + nm(v) + "さんにしました" : WD[day] + "曜の当番をなしにしました"); }
   else if (a === "dedit") { const t = S.tasks.find(x => x.series === id && !x.done) || S.tasks.find(x => x.series === id); if (t) openForm(t); else toast("今週の分がまだ出ていないので、曜日の担当だけ変えられます", 4000); }
   else if (a === "dnew") { openForm(null); F.cat = "掃除"; F.rep = "weekly"; F.days = [0,1,2,3,4,5,6]; F.rotOn = true; F.time = "06:00"; renderSheet(); }
+  else if (a === "av") { ui.allView = v; tab = "all"; render(); window.scrollTo(0, 0); }
+  else if (a === "per") { ui.per = v; render(); }
   else if (a === "stwho") { showStampWho(id, v, b); }
   else if (a === "stclose") { closeReact(); }
   else if (a === "react") { openReact(id, b.dataset.pal, b.closest("[data-react]") || b); }
