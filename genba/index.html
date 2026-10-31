@@ -211,6 +211,12 @@ textarea:focus{outline:3px solid var(--green);outline-offset:1px}
 .crow .p{grid-area:p;font-size:12px;color:var(--muted)}
 .crow .pill{grid-area:pill}
 .crow.late{background:var(--red-soft)} .crow.late .tm{color:var(--red)}
+.stpop{position:fixed;z-index:70;left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.28);padding:12px 14px;display:flex;flex-direction:column;gap:8px;animation:rin .15s ease-out}
+.stpop .sh{display:flex;align-items:center;gap:8px}
+.stpop .sh .e{font-size:30px}
+.stpop .sl{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto}
+.stpop .si{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-weight:700}
+.stpop .si:last-child{border-bottom:0}
 .stamps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stc{font:inherit;font-size:13px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;min-height:34px}
 .stc[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-soft);font-weight:700}
@@ -312,7 +318,7 @@ function stampRow(target, pal, owners) {
   const agg = {};
   list.forEach(x => { const k = x.stamp; agg[k] = agg[k] || { n: new Set(), me: false }; agg[k].n.add(x.from); if (x.from === cfg.me) agg[k].me = true; });
   const mine = (owners || []).includes(cfg.me);
-  const chips = Object.entries(agg).map(([k,v]) => `<button class="stc" data-a="stamp" data-id="${esc(target)}" data-v="${k}" aria-pressed="${v.me}" title="${esc([...v.n].map(nm).join("・"))}">${STAMP[k][0]} ${STAMP[k][1]} ${v.n.size}</button>`).join("");
+  const chips = Object.entries(agg).map(([k,v]) => `<button class="stc" data-a="stwho" data-id="${esc(target)}" data-v="${k}" aria-pressed="${v.me}" aria-label="${STAMP[k][1]}を送った人を見る">${STAMP[k][0]} ${STAMP[k][1]} ${v.n.size}</button>`).join("");
   if (!chips && mine) return "";
   return `<div class="stamps">${chips}<button class="stc add" data-a="react" data-id="${esc(target)}" data-pal="${pal}" aria-label="スタンプを送る">😊＋</button></div>`;
 }
@@ -392,7 +398,23 @@ const cCount = target => (S.comments || []).filter(c => c.target === target).len
 
 /* ---------- 長押しでスタンプ（LINEのリアクションのように） ---------- */
 let lp = null;
-function closeReact() { document.querySelectorAll(".react,.react-bg").forEach(x => x.remove()); }
+function closeReact() { document.querySelectorAll(".react,.react-bg,.stpop").forEach(x => x.remove()); }
+/* スタンプを押したら、誰が送ったかを出す */
+function showStampWho(target, k, el) {
+  closeReact();
+  const list = (S.stamps || []).filter(x => x.target === target && x.stamp === k);
+  const by = {}; list.forEach(x => { if (!by[x.from] || by[x.from] < x.at) by[x.from] = x.at; });
+  const people = Object.entries(by).sort((a, b) => b[1] - a[1]);
+  const mine = !!by[cfg.me];
+  const bg = document.createElement("div"); bg.className = "react-bg"; bg.addEventListener("click", closeReact);
+  const box = document.createElement("div"); box.className = "stpop"; box.setAttribute("role", "dialog");
+  box.innerHTML = `<div class="sh"><span class="e">${STAMP[k][0]}</span><b>${STAMP[k][1]}</b><span class="muted small">${people.length}人</span></div>
+    <div class="sl">${people.map(([id, at]) => `<div class="si"><span>${esc(av(id) + nm(id))}${id === cfg.me ? "（自分）" : ""}</span><span class="muted small">${esc(fmt(at))}</span></div>`).join("")}</div>
+    <div class="acts"><button class="btn sm${mine ? " ghost" : " primary"}" data-a="stamp" data-id="${esc(target)}" data-v="${k}">${mine ? "自分の分を取り消す" : "自分も送る"}</button><button class="btn sm ghost" data-a="stclose">閉じる</button></div>`;
+  document.body.append(bg, box);
+  const r = el.getBoundingClientRect(), hgt = box.offsetHeight;
+  box.style.top = Math.max(12, Math.min(window.innerHeight - hgt - 90, r.top - hgt - 8 < 12 ? r.bottom + 8 : r.top - hgt - 8)) + "px";
+}
 function openReact(target, pal, el) {
   closeReact();
   if (navigator.vibrate) navigator.vibrate(15);
@@ -1064,6 +1086,8 @@ document.addEventListener("click", async e => {
   else if (a === "dset") { const day = Number(b.dataset.day); ui.pick = null; act("setRotDay", { id, day, who: v }, v ? WD[day] + "曜を" + nm(v) + "さんにしました" : WD[day] + "曜の当番をなしにしました"); }
   else if (a === "dedit") { const t = S.tasks.find(x => x.series === id && !x.done) || S.tasks.find(x => x.series === id); if (t) openForm(t); else toast("今週の分がまだ出ていないので、曜日の担当だけ変えられます", 4000); }
   else if (a === "dnew") { openForm(null); F.cat = "掃除"; F.rep = "weekly"; F.days = [0,1,2,3,4,5,6]; F.rotOn = true; F.time = "06:00"; renderSheet(); }
+  else if (a === "stwho") { showStampWho(id, v, b); }
+  else if (a === "stclose") { closeReact(); }
   else if (a === "react") { openReact(id, b.dataset.pal, b.closest("[data-react]") || b); }
   else if (a === "stamp") { closeReact(); if (navigator.vibrate) navigator.vibrate(10); act("stamp", { target: id, stamp: v }, r => (r.state.stamps || []).some(x => x.target === id && x.stamp === v && x.from === cfg.me) ? STAMP[v][0] + " を送りました" : "取り消しました"); }
   else if (a === "undo") act("undoTask", { id });
