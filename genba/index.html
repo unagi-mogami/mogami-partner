@@ -457,7 +457,7 @@ async function saveCustom(file) {
   try { await idb("readwrite", st => st.put(file, "sound")); } catch(e) { toast("保存できませんでした", 4000); return; }
   if (customUrl) URL.revokeObjectURL(customUrl);
   customUrl = URL.createObjectURL(file); customName = file.name; ls.set("genba-sound-name", file.name);
-  soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render();
+  soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render(); if (PR) renderProfile();
 }
 loadCustom();
 function tone(kind, style) {
@@ -547,7 +547,7 @@ function diagPanel() {
     <p class="hint">テスト通知が届くと、iPhoneの「設定 → 通知」の一覧に「現場ノート」が出てきます。そこで「サウンド」をオンにしてください。</p></details>
   <details class="panel"><summary style="font-weight:700;cursor:pointer">🎵 アプリを開いている時の通知音</summary>
     <div class="chips">${Object.entries(SOUNDS).map(([k, v]) => `<button data-a="snd" data-v="${k}" aria-pressed="${soundPick === k}">${v.name}</button>`).join("")}${customUrl ? `<button data-a="snd" data-v="custom" aria-pressed="${soundPick === "custom"}">🎵 ${esc(customName.slice(0, 16) || "自分の音")}</button>` : ""}</div>
-    <label class="btn sm" style="display:inline-flex;align-items:center;gap:6px;width:fit-content">🎵 自分の音を選ぶ（SUNOの曲など）<input type="file" id="sndFile" accept="audio/*,.mp3,.m4a,.wav,.aac" hidden></label>
+    <label class="btn sm" style="display:inline-flex;align-items:center;gap:6px;width:fit-content">🎵 自分の音（mp3）<input type="file" id="sndFile" accept="audio/*,.mp3,.m4a,.wav,.aac" hidden></label>
     <p class="hint">曲は最初の6秒だけ鳴ります（「しつこく」は12秒）。この端末だけに保存されます。</p>
     <p class="hint">押すと音が鳴って、この端末の音に決まります。アプリを閉じている時の音は、iPhoneの「設定 → サウンドと触覚 → デフォルトの通知音」で選べます（ほかのアプリと共通）。</p></details>`;
 }
@@ -555,7 +555,7 @@ async function rePush() {
   if (busy) return;
   try { const r = swReg || (await navigator.serviceWorker.register("sw.js")); const sub = r.pushManager && await r.pushManager.getSubscription();
     if (sub) { await api("unsubscribe", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); } } catch(e) {}
-  pushOn = false; await enablePush(); await diagCheck(); render();
+  pushOn = false; await enablePush(); await diagCheck(); render(); if (PR) renderProfile();
 }
 function pushBanner() {
   if (pushOn) return "";
@@ -563,7 +563,7 @@ function pushBanner() {
     <ol class="steps"><li>この画面を<b>Safari</b>で開く</li><li>下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す（この画面のまま追加すると、次からは入力なしで開けます）</li><li>ホーム画面の「現場ノート」から開き直して、「通知をオンにする」を押す</li></ol></div>`;
   if (!pushable) return `<div class="banner warn"><b>このブラウザでは通知が使えません</b><p>iPhoneはSafari、AndroidはChromeで開いてください。</p></div>`;
   if (Notification.permission === "denied") return `<div class="banner err"><b>通知が止められています</b><p>スマホの設定 → 通知 →「現場ノート」（またはブラウザ）をオンにしてから、下のボタンを押してください。</p><button class="btn primary" data-a="push">通知をオンにする</button></div>`;
-  return `<div class="banner warn"><b>通知がまだオフです</b><p>期限やお休みの連絡が、このスマホに届くようにします。</p><button class="btn primary big" data-a="push" ${busy?"disabled":""}>通知をオンにする</button></div>`;
+  return `<div class="banner warn"><b>通知がまだオフです</b><p>期限やお休みの連絡が、このスマホに届くようにします。あとから右上の自分の名前 →「このスマホの通知」でも設定できます。</p><button class="btn primary big" data-a="push" ${busy?"disabled":""}>通知をオンにする</button></div>`;
 }
 
 /* ---------- 画面：最初の設定 ---------- */
@@ -694,8 +694,7 @@ function viewMine() {
   <section class="panel"><h2>👥 みんなの今日の残り <span class="muted small">${others.length}件</span></h2>
     ${others.length ? `<div class="clist">${others.map(crow).join("")}</div>` : `<p class="muted small">ほかの人の今日の分は、全部終わっています。</p>`}</section>
   ${mineLater.length ? `<details class="panel"><summary style="font-weight:700;cursor:pointer">📅 明日以降の自分の分（${mineLater.length}件）</summary><div class="list" style="margin-top:10px">${mineLater.map(taskCard).join("")}</div></details>` : ""}
-  ${weekPanel(true)}
-  ${diagPanel()}`;
+  ${weekPanel(true)}`;
 }
 
 /* ---------- 画面：みんな ---------- */
@@ -868,6 +867,7 @@ function renderProfile() {
       <div class="field"><label for="pBio">ひとこと（任意・40文字まで）</label><input id="pBio" maxlength="40" value="${esc(PR.bio)}" placeholder="例：串打ち担当です！" autocomplete="off"></div>
       <button class="btn primary big" data-a="psave" ${busy ? "disabled" : ""}>保存する</button>
     </div>
+    <h2 style="margin:4px 0 0">このスマホの通知</h2>${diagPanel()}
     <div class="panel"><h3>このスマホを別の人で使う</h3><p class="small muted">機種変更や、スマホを人に渡す時に使います。</p><button class="btn sm danger" data-a="pswitch">別の名前で入り直す</button></div></div>`;
   sh.hidden = false; document.body.style.overflow = "hidden";
 }
@@ -922,7 +922,8 @@ function viewAdmin() {
   const act_ = adm.staff.filter(s => s.active !== false);
   const opts = sel => `<option value="">―</option>` + act_.map(s => `<option value="${esc(s.id)}"${s.id===sel?" selected":""}>${esc(s.name)}</option>`).join("");
   const offList = act_.filter(s => !S.notif[s.id]);
-  return `
+  return `<h2 style="margin:0">このスマホの通知</h2>${diagPanel()}
+  <h2 style="margin:8px 0 0">会社の設定</h2>
   <div class="panel"><h2>社員を招待する</h2>
     <p class="small muted">このリンクをLINEで社員に送ります。開くと自動で設定され、名前を選ぶだけで使えます。</p>
     <div class="acts"><a class="btn primary" href="https://line.me/R/msg/text/?${encodeURIComponent(inviteText())}" target="_blank" rel="noopener">LINEで送る</a><button class="btn" data-a="copy">文章をコピー</button></div>
@@ -1036,8 +1037,8 @@ document.addEventListener("click", async e => {
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
   else if (a === "repush") rePush();
-  else if (a === "snd" && v === "custom") { soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render(); }
-  else if (a === "snd") { soundPick = v; ls.set("genba-sound", v); unlocked = true; chime("normal", v); render(); }
+  else if (a === "snd" && v === "custom") { soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render(); if (PR) renderProfile(); }
+  else if (a === "snd") { soundPick = v; ls.set("genba-sound", v); unlocked = true; chime("normal", v); render(); if (PR) renderProfile(); }
   else if (a === "sound") { unlocked = true; chime("normal"); toast("この音が鳴れば、アプリを開いている時の音はOKです。鳴らない時は本体の音量を上げてください", 5000); }
   else if (a === "done") { celebrate(); act("doneTask", { id }); }
   else if (a === "dpick") { const d = Number(v); ui.pick = ui.pick && ui.pick.id === id && ui.pick.day === d ? null : { id, day: d }; render(); }
