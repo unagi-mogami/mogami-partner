@@ -226,6 +226,14 @@ textarea:focus{outline:3px solid var(--green);outline-offset:1px}
 .bar span{display:block;height:100%;background:var(--green);border-radius:999px}
 .nums{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .nums .lt{color:var(--red);font-weight:700}
+.alarm{position:fixed;inset:0;z-index:90;background:rgba(162,59,44,.96);color:#fff;display:flex;align-items:center;justify-content:center;padding:calc(20px + env(safe-area-inset-top,0px)) 24px calc(20px + env(safe-area-inset-bottom,0px))}
+.alarm .ab{width:min(420px,100%);display:flex;flex-direction:column;gap:12px;text-align:center}
+.alarm .ic{font-size:72px;animation:ring .5s ease-in-out infinite alternate}
+.alarm h2{font-size:26px;color:#fff}
+.alarm .note{background:rgba(255,255,255,.18);color:#fff}
+.alarm .btn.done{background:#fff;color:#A23B2C;border-color:#fff}
+@keyframes ring{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+@media (prefers-reduced-motion:reduce){.alarm .ic{animation:none}}
 .stamps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stc{font:inherit;font-size:13px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;min-height:34px}
 .stc[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-soft);font-weight:700}
@@ -360,7 +368,7 @@ const CATS = [["","なし"],["掃除","🧹 掃除"],["事務","📋 事務"],["
 const catLabel = c => (CATS.find(x => x[0] === c) || ["",""])[1];
 function rotDays() { return F.rep === "weekly" ? F.days.slice().sort() : F.rep === "daily" ? [0,1,2,3,4,5,6] : F.rep === "weekdays" ? [1,2,3,4,5] : []; }
 const rotAllowed = () => ["weekly","daily","weekdays"].includes(F.rep);
-const ALARM = { normal:["ふつう","期限に1回知らせる"], repeat:["しつこく","終わるまで5分おきに3回まで"], silent:["音なし","音を鳴らさず画面に出すだけ"] };
+const ALARM = { normal:["ふつう","期限に1回知らせる"], repeat:["アラーム","終わるまで1分ごとに鳴らす（最大10回）"], silent:["音なし","音を鳴らさず画面に出すだけ"] };
 function ruleLabel(r) {
   if (!r) return "";
   const n = r.every > 1 ? r.every : 0;
@@ -511,10 +519,11 @@ function releaseAudio() {
   try { if (player) { player.pause(); player.removeAttribute("src"); player.load(); } } catch(e) {}
   try { if ("mediaSession" in navigator) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = "none"; } } catch(e) {}
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") { clearTimeout(stopT); releaseAudio(); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") { clearTimeout(stopT); alarmOn = null; document.querySelectorAll(".alarm").forEach(x => x.remove()); try { if (player) player.loop = false; } catch(e) {} releaseAudio(); } });
 function chime(kind, style) {
   if (kind === "silent") return;
   if (document.visibilityState !== "visible") return;   // 画面を消している時は、iPhoneの通知音にまかせる
+  if (alarmOn) return;
   if ((style || soundPick) === "custom" && customUrl && kind !== "stamp") {
     try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = customUrl; player.currentTime = 0; player.play().catch(() => {});
       stopT = setTimeout(releaseAudio, kind === "repeat" ? 12000 : 6000); } catch(e) {}
@@ -523,6 +532,42 @@ function chime(kind, style) {
   try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal", arguments[1]); player.currentTime = 0; player.play().catch(() => {}); clearTimeout(stopT); stopT = setTimeout(releaseAudio, kind === "repeat" ? 5000 : 2500); } catch(e) {}
   if (navigator.vibrate) navigator.vibrate(kind === "repeat" ? [300,120,300,120,300] : [150,80,150]);
 }
+
+/* ---------- アラーム（アプリを開いている時は、止めるまで鳴らす） ---------- */
+let alarmOn = null;
+const snoozed = () => ls.get("genba-snooze") || {};
+function dueAlarms() {
+  if (!S || !cfg.me) return [];
+  const now = Date.now(), sz = snoozed();
+  return S.tasks.filter(t => !t.done && t.alarm === "repeat" && t.due <= now && t.due > now - 12 * 3600e3 && pendingOf(t).includes(cfg.me) && !(sz[t.id] > now));
+}
+function checkAlarm() {
+  if (document.visibilityState !== "visible") return;
+  const list = dueAlarms();
+  if (!list.length) { stopAlarm(); return; }
+  const t = list[0];
+  if (alarmOn === t.id && document.querySelector(".alarm")) return;
+  stopAlarm(); alarmOn = t.id;
+  const el = document.createElement("div"); el.className = "alarm"; el.setAttribute("role", "alertdialog");
+  el.innerHTML = `<div class="ab"><div class="ic">⏰</div><p class="small">アラーム ${esc(hmOnly(t.due))}</p><h2>${esc(t.what)}</h2>${t.note ? `<p class="note">📝 ${esc(t.note)}</p>` : ""}
+    ${list.length > 1 ? `<p class="small">ほかに ${list.length - 1} 件</p>` : ""}
+    <button class="btn done big" data-a="aldone" data-id="${esc(t.id)}">終わった</button>
+    <button class="btn big" data-a="alsnooze" data-id="${esc(t.id)}" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.5)">5分後にもう一度</button></div>`;
+  document.body.appendChild(el);
+  el.addEventListener("pointerdown", ringAlarm, { once: true });
+  ringAlarm();
+}
+function ringAlarm() {
+  if (!alarmOn) return;
+  try { if (!player) player = new Audio(); clearTimeout(stopT); player.loop = true;
+    player.src = soundPick === "custom" && customUrl ? customUrl : tone("repeat"); player.currentTime = 0; player.play().catch(() => {}); } catch(e) {}
+}
+function stopAlarm() {
+  alarmOn = null; document.querySelectorAll(".alarm").forEach(x => x.remove());
+  try { if (player) player.loop = false; } catch(e) {}
+  releaseAudio();
+}
+function snooze(id, min) { const sz = snoozed(), now = Date.now(); Object.keys(sz).forEach(k => { if (sz[k] < now) delete sz[k]; }); sz[id] = now + min * 60000; ls.set("genba-snooze", sz); }
 
 /* ---------- 通知 ---------- */
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -661,7 +706,7 @@ function taskCard(t) {
     who.length > 1 ? `<span class="tg">${t.mode === "all" ? "全員それぞれ" : "誰か1人でOK"}</span>` : "",
     s ? `<span class="tg">🔁 ${esc(ruleLabel(s.rule))}</span>` : "",
     t.remind ? `<span class="tg">🔔 ${esc((REMIND.find(r => r[0] === t.remind) || [0,""])[1])}</span>` : "",
-    t.alarm === "repeat" ? `<span class="tg">📣 しつこく</span>` : t.alarm === "silent" ? `<span class="tg">🔕 音なし</span>` : ""
+    t.alarm === "repeat" ? `<span class="tg">⏰ アラーム</span>` : t.alarm === "silent" ? `<span class="tg">🔕 音なし</span>` : ""
   ].join("");
   let buttons = "";
   if (t.done) buttons = `<button class="btn sm ghost" data-a="undo" data-id="${esc(t.id)}">未完了に戻す</button>`;
@@ -1054,6 +1099,7 @@ function render() {
   if (N && $("#nNote")) N.note = $("#nNote").value;
   app.innerHTML = tab === "mine" ? viewMine() : tab === "all" ? viewAll() : tab === "board" ? viewBoard() : tab === "duty" ? viewDuty() : viewAdmin();
   if (keep && $("#" + keep.id)) { const el = $("#" + keep.id); el.value = keep.v; el.focus(); }
+  setTimeout(checkAlarm, 0);
   if (flashId) { const el = document.getElementById("task-" + flashId); if (el) el.scrollIntoView({ block: "center" }); setTimeout(() => { flashId = ""; }, 3000); }
 }
 
@@ -1126,6 +1172,8 @@ document.addEventListener("click", async e => {
   else if (a === "dnew") { openForm(null); F.cat = "掃除"; F.rep = "weekly"; F.days = [0,1,2,3,4,5,6]; F.rotOn = true; F.time = "06:00"; renderSheet(); }
   else if (a === "av") { ui.allView = v; tab = "all"; render(); window.scrollTo(0, 0); }
   else if (a === "per") { ui.per = v; render(); }
+  else if (a === "aldone") { stopAlarm(); celebrate(); act("doneTask", { id }); }
+  else if (a === "alsnooze") { snooze(id, 5); stopAlarm(); toast("5分後にもう一度鳴らします"); setTimeout(checkAlarm, 5 * 60000 + 1000); }
   else if (a === "stwho") { showStampWho(id, v, b); }
   else if (a === "stclose") { closeReact(); }
   else if (a === "react") { openReact(id, b.dataset.pal, b.closest("[data-react]") || b); }
@@ -1296,6 +1344,7 @@ function route() {
   remember();
   route(); render(); swInit().then(() => diagCheck()).then(render);
   window.addEventListener("hashchange", () => { route(); render(); });
+  setInterval(checkAlarm, 15000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(true); });
   setInterval(() => { if (document.visibilityState === "visible" && !busy && !F && !N && !ui.nudge && !document.activeElement.matches("input,select,textarea")) refresh(true); }, 60000);
   if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data && ev.data.type === "push") { chime(ev.data.alarm); toast(ev.data.title, 4000); refresh(true); return; } if (ev.data && ev.data.url) { history.replaceState(null, "", new URL(ev.data.url).hash || location.pathname); route(); refresh(true); } });

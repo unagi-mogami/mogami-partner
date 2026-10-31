@@ -419,13 +419,15 @@ function init(req, P) {
 /** 自動チェックが動いていない時だけ、エディタでこの関数を1回実行してください */
 function setupTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "tick") ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger("tick").timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger("tick").timeBased().everyMinutes(1).create();
+  PropertiesService.getScriptProperties().setProperty("TRIG_VER", "2");
 }
 
 /* ---------- 5分ごとの自動チェック ---------- */
 function tick() {
   var P = props();
   if (!P.SHEET_ID) return;
+  if (P.TRIG_VER !== "2") { try { setupTrigger(); } catch (x) {} }   // 自動チェックを1分ごとに切り替える（1回だけ）
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return;
   try {
@@ -450,9 +452,9 @@ function tick() {
       if (!t.n1 && t.due <= now) {
         push(db, P, pend, { title: "⏰ 期限です：" + t.what, body: "期限 " + hm(t.due) + "。終わったら「終わった」を押してください。", tag: "t" + t.id, url: link, alarm: t.alarm });
         t.n1 = now; t.n0 = t.n0 || now; dirtyT = true;
-      } else if (t.n1 && t.alarm === "repeat" && (t.nrep || 0) < 3 && now - t.n1 >= ((t.nrep || 0) + 1) * 5 * 60000 - 30000) {
+      } else if (t.n1 && t.alarm === "repeat" && (t.nrep || 0) < 10 && now - t.n1 >= ((t.nrep || 0) + 1) * 60000 - 20000) {
         t.nrep = (t.nrep || 0) + 1;
-        push(db, P, pend, { title: "⏰ まだ終わっていません（" + t.nrep + "回目）：" + t.what, body: "期限 " + hm(t.due) + " を過ぎています。終わったら「終わった」を押してください。", tag: "t" + t.id, url: link, alarm: "repeat" });
+        push(db, P, pend, { title: "⏰ アラーム（" + (t.nrep + 1) + "回目）：" + t.what, body: "期限 " + hm(t.due) + " を過ぎています。終わったら「終わった」を押してください。", tag: "t" + t.id, url: link, alarm: "repeat" });
         dirtyT = true;
       }
       if (!t.n2 && t.due + esc <= now) {
