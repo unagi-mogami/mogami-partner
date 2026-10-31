@@ -471,18 +471,25 @@ function tone(kind, style) {
 let player = null, unlocked = false;
 function unlockAudio() {
   if (unlocked) return; unlocked = true;
-  try { player = new Audio(); player.setAttribute("playsinline", ""); player.src = tone("mute"); player.play().catch(() => { unlocked = false; }); } catch(e) { unlocked = false; }
+  try { player = new Audio(); player.setAttribute("playsinline", ""); player.src = tone("mute"); player.play().then(() => setTimeout(releaseAudio, 200)).catch(() => { unlocked = false; }); } catch(e) { unlocked = false; }
 }
 document.addEventListener("touchend", unlockAudio, { passive: true }); document.addEventListener("click", unlockAudio);
 let stopT = null;
+/* 鳴らし終わったら音を手放す（iPhoneのロック画面に音楽プレーヤーが残らないように） */
+function releaseAudio() {
+  try { if (player) { player.pause(); player.removeAttribute("src"); player.load(); } } catch(e) {}
+  try { if ("mediaSession" in navigator) { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = "none"; } } catch(e) {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") { clearTimeout(stopT); releaseAudio(); } });
 function chime(kind, style) {
   if (kind === "silent") return;
+  if (document.visibilityState !== "visible") return;   // 画面を消している時は、iPhoneの通知音にまかせる
   if ((style || soundPick) === "custom" && customUrl && kind !== "stamp") {
     try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = customUrl; player.currentTime = 0; player.play().catch(() => {});
-      stopT = setTimeout(() => { try { player.pause(); } catch(e) {} }, kind === "repeat" ? 12000 : 6000); } catch(e) {}
+      stopT = setTimeout(releaseAudio, kind === "repeat" ? 12000 : 6000); } catch(e) {}
     return;
   }
-  try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal", arguments[1]); player.currentTime = 0; player.play().catch(() => {}); } catch(e) {}
+  try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal", arguments[1]); player.currentTime = 0; player.play().catch(() => {}); clearTimeout(stopT); stopT = setTimeout(releaseAudio, kind === "repeat" ? 5000 : 2500); } catch(e) {}
   if (navigator.vibrate) navigator.vibrate(kind === "repeat" ? [300,120,300,120,300] : [150,80,150]);
 }
 
