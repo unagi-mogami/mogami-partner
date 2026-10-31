@@ -401,20 +401,53 @@ document.addEventListener("contextmenu", e => { const it = e.target.closest("[da
 /* ---------- アプリを開いている時の音 ----------
    iPhoneはマナーモードだとWeb Audioが鳴らないため、音のデータ（WAV）を作って <audio> で鳴らす */
 const tones = {};
-function wav(notes, step, vol) {
+function wav(notes, step, vol, wave, decay) {
   const sr = 22050, len = Math.ceil(sr * step * (notes.length + 1)), d = new Int16Array(len);
   notes.forEach((f, i) => { const st = Math.floor(i * step * sr), n = Math.floor(step * 1.4 * sr);
-    for (let k = 0; k < n && st + k < len; k++) { const t = k / sr, env = Math.min(1, k / (sr * 0.01)) * Math.exp(-t * 6);
-      d[st + k] = Math.max(-32767, Math.min(32767, d[st + k] + Math.sin(2 * Math.PI * f * t) * env * vol * 32767)); } });
+    if (!f) return;
+    for (let k = 0; k < n && st + k < len; k++) { const t = k / sr, env = Math.min(1, k / (sr * 0.01)) * Math.exp(-t * (decay || 6)), ph = Math.sin(2 * Math.PI * f * t);
+      const w = wave === "square" ? (ph >= 0 ? 0.6 : -0.6) : wave === "bell" ? ph * 0.7 + Math.sin(2 * Math.PI * f * 2.76 * t) * 0.3 * Math.exp(-t * 9) : ph;
+      d[st + k] = Math.max(-32767, Math.min(32767, d[st + k] + w * env * vol * 32767)); } });
   const buf = new ArrayBuffer(44 + len * 2), v = new DataView(buf), w = (o, str) => [...str].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
   w(0, "RIFF"); v.setUint32(4, 36 + len * 2, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, len * 2, true);
   new Int16Array(buf, 44).set(d);
   return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
 }
-function tone(kind) {
-  if (!tones[kind]) tones[kind] = kind === "repeat" ? wav([880, 660, 880, 660, 880, 660, 880, 660], 0.2, 0.9) : kind === "stamp" ? wav([1046, 1318], 0.14, 0.6) : kind === "mute" ? wav([20], 0.05, 0) : wav([784, 1046, 1318, 1046, 1318], 0.15, 0.8);
-  return tones[kind];
+const SOUNDS = {
+  chime:  { name: "チャイム", notes: [784, 1046, 1318, 1046, 1318], step: 0.15, wave: "sine" },
+  bell:   { name: "ベル",     notes: [1318, 1568, 2093], step: 0.32, wave: "bell", decay: 3 },
+  pico:   { name: "ピコピコ", notes: [1760, 0, 1760, 0, 1760], step: 0.09, wave: "square", decay: 14 },
+  xylo:   { name: "木琴",     notes: [1046, 1174, 1318, 1568, 1760], step: 0.1, wave: "sine", decay: 11 },
+  buzzer: { name: "ブザー（強め）", notes: [523, 0, 523, 0, 523], step: 0.18, wave: "square", decay: 2 },
+  marimba:{ name: "マリンバ", notes: [659, 784, 988, 784], step: 0.17, wave: "sine", decay: 8 }
+};
+let soundPick = ls.get("genba-sound") || "chime";
+/* 自分の音（SUNOで作った曲など）：この端末の中（IndexedDB）にだけ保存する */
+let customUrl = null, customName = ls.get("genba-sound-name") || "";
+function idb(mode, fn) {
+  return new Promise((res, rej) => { try { const rq = indexedDB.open("genba", 1); rq.onupgradeneeded = () => rq.result.createObjectStore("files");
+    rq.onsuccess = () => { const tx = rq.result.transaction("files", mode); const st = tx.objectStore("files"); const r = fn(st); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); };
+    rq.onerror = () => rej(rq.error); } catch(e) { rej(e); } });
+}
+async function loadCustom() { try { const b = await idb("readonly", st => st.get("sound")); if (b) customUrl = URL.createObjectURL(b); } catch(e) {} }
+async function saveCustom(file) {
+  if (!file) return;
+  if (!/^audio\//.test(file.type) && !/\.(mp3|m4a|wav|aac|ogg)$/i.test(file.name)) { toast("音のファイル（mp3・m4a・wav）を選んでください", 4000); return; }
+  if (file.size > 15e6) { toast("ファイルが大きすぎます（15MBまで）。短く切った音にしてください", 5000); return; }
+  try { await idb("readwrite", st => st.put(file, "sound")); } catch(e) { toast("保存できませんでした", 4000); return; }
+  if (customUrl) URL.revokeObjectURL(customUrl);
+  customUrl = URL.createObjectURL(file); customName = file.name; ls.set("genba-sound-name", file.name);
+  soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render();
+}
+loadCustom();
+function tone(kind, style) {
+  const st = SOUNDS[style || soundPick] || SOUNDS.chime, key = kind + ":" + (style || soundPick);
+  if (!tones[key]) tones[key] = kind === "mute" ? wav([20], 0.05, 0)
+    : kind === "stamp" ? wav([1046, 1318], 0.14, 0.6)
+    : kind === "repeat" ? wav(st.notes.concat([0], st.notes, [0], st.notes), st.step, 0.95, st.wave, st.decay)
+    : wav(st.notes, st.step, 0.85, st.wave, st.decay);
+  return tones[key];
 }
 let player = null, unlocked = false;
 function unlockAudio() {
@@ -422,9 +455,15 @@ function unlockAudio() {
   try { player = new Audio(); player.setAttribute("playsinline", ""); player.src = tone("mute"); player.play().catch(() => { unlocked = false; }); } catch(e) { unlocked = false; }
 }
 document.addEventListener("touchend", unlockAudio, { passive: true }); document.addEventListener("click", unlockAudio);
-function chime(kind) {
+let stopT = null;
+function chime(kind, style) {
   if (kind === "silent") return;
-  try { if (!player) player = new Audio(); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal"); player.currentTime = 0; player.play().catch(() => {}); } catch(e) {}
+  if ((style || soundPick) === "custom" && customUrl && kind !== "stamp") {
+    try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = customUrl; player.currentTime = 0; player.play().catch(() => {});
+      stopT = setTimeout(() => { try { player.pause(); } catch(e) {} }, kind === "repeat" ? 12000 : 6000); } catch(e) {}
+    return;
+  }
+  try { if (!player) player = new Audio(); clearTimeout(stopT); player.src = tone(kind === "repeat" ? "repeat" : kind === "stamp" ? "stamp" : "normal", arguments[1]); player.currentTime = 0; player.play().catch(() => {}); } catch(e) {}
   if (navigator.vibrate) navigator.vibrate(kind === "repeat" ? [300,120,300,120,300] : [150,80,150]);
 }
 
@@ -486,7 +525,12 @@ function diagPanel() {
   return `<details class="panel" ${pushOn ? "" : "open"}><summary style="font-weight:700;cursor:pointer">🔔 通知の状態を確かめる</summary>
     <div class="rank" style="grid-template-columns:auto 1fr;margin-top:8px">${rows.map(([k,v]) => `<span class="h" style="font-size:13px">${k}</span><span>${v}</span>`).join("")}</div>
     <div class="acts"><button class="btn sm primary" data-a="repush">通知の設定をやり直す</button><button class="btn sm" data-a="test">テスト通知を送る</button><button class="btn sm ghost" data-a="sound">🔊 音を確かめる</button></div>
-    <p class="hint">テスト通知が届くと、iPhoneの「設定 → 通知」の一覧に「現場ノート」が出てきます。そこで「サウンド」をオンにしてください。</p></details>`;
+    <p class="hint">テスト通知が届くと、iPhoneの「設定 → 通知」の一覧に「現場ノート」が出てきます。そこで「サウンド」をオンにしてください。</p></details>
+  <div class="panel"><h3>🎵 アプリを開いている時の通知音</h3>
+    <div class="chips">${Object.entries(SOUNDS).map(([k, v]) => `<button data-a="snd" data-v="${k}" aria-pressed="${soundPick === k}">${v.name}</button>`).join("")}${customUrl ? `<button data-a="snd" data-v="custom" aria-pressed="${soundPick === "custom"}">🎵 ${esc(customName.slice(0, 16) || "自分の音")}</button>` : ""}</div>
+    <label class="btn sm" style="display:inline-flex;align-items:center;gap:6px;width:fit-content">🎵 自分の音を選ぶ（SUNOの曲など）<input type="file" id="sndFile" accept="audio/*,.mp3,.m4a,.wav,.aac" hidden></label>
+    <p class="hint">曲は最初の6秒だけ鳴ります（「しつこく」は12秒）。この端末だけに保存されます。</p>
+    <p class="hint">押すと音が鳴って、この端末の音に決まります。アプリを閉じている時の音は、iPhoneの「設定 → サウンドと触覚 → デフォルトの通知音」で選べます（ほかのアプリと共通）。</p></div>`;
 }
 async function rePush() {
   if (busy) return;
@@ -911,6 +955,8 @@ document.addEventListener("click", async e => {
   else if (a === "push") enablePush();
   else if (a === "test") testPush();
   else if (a === "repush") rePush();
+  else if (a === "snd" && v === "custom") { soundPick = "custom"; ls.set("genba-sound", "custom"); unlocked = true; chime("normal"); render(); }
+  else if (a === "snd") { soundPick = v; ls.set("genba-sound", v); unlocked = true; chime("normal", v); render(); }
   else if (a === "sound") { unlocked = true; chime("normal"); toast("この音が鳴れば、アプリを開いている時の音はOKです。鳴らない時は本体の音量を上げてください", 5000); }
   else if (a === "done") { celebrate(); act("doneTask", { id }); }
   else if (a === "dpick") { const d = Number(v); ui.pick = ui.pick && ui.pick.id === id && ui.pick.day === d ? null : { id, day: d }; render(); }
@@ -971,6 +1017,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const el = e.target;
+  if (el.id === "sndFile") { saveCustom(el.files && el.files[0]); el.value = ""; return; }
   if (el.dataset && el.dataset.tk) { const k = el.dataset.tk; if (k.startsWith("N.")) syncNotice(); const [h, m] = (getV(k) || "00:00").split(":"); setV(k, el.dataset.part === "h" ? el.value + ":" + m : h + ":" + el.value); return; }
   if (el.id === "fRotOn" || (el.dataset && el.dataset.rot !== undefined)) el.dispatchEvent(new Event("input", { bubbles: true }));
   else if (el.id === "fUnit" || el.id === "fRemind") el.dispatchEvent(new Event("input", { bubbles: true }));
