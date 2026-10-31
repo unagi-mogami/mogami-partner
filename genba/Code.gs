@@ -14,7 +14,7 @@ var LEAD = 12 * 3600e3;          // 繰り返しのやることを、期限の�
 var DAY = 864e5;
 
 var SCHEMA = {
-  staff:    ["id:s", "name:s", "leader:b", "owner:b", "active:b"],
+  staff:    ["id:s", "name:s", "leader:b", "owner:b", "active:b", "icon:s", "bio:s"],
   tasks:    ["id:s", "what:s", "who:s", "due:n", "by:s", "at:n", "done:b", "doneBy:s", "doneAt:n", "n1:n", "n2:n", "mode:s", "doneMap:j", "remind:n", "n0:n", "series:s", "alarm:s", "nrep:n", "note:s", "lastNudge:j", "cat:s"],
   series:   ["id:s", "what:s", "who:s", "mode:s", "remind:n", "rule:j", "start:n", "last:n", "by:s", "at:n", "active:b", "alarm:s", "note:s", "rot:j", "cat:s", "duty:b"],
   areas:    ["id:s", "name:s", "ord:n", "deadline:s", "d0:s", "d1:s", "d2:s", "d3:s", "d4:s", "d5:s", "d6:s"],
@@ -264,7 +264,8 @@ function handle(req) {
 
       case "saveStaff": {
         var list = (req.staff || []).slice(0, 60).map(function (x) {
-          return { id: String(x.id || uid()), name: clean(x.name, 20), leader: !!x.leader, owner: !!x.owner, active: x.active !== false };
+          var old = staffById(db, x.id) || {};
+          return { id: String(x.id || uid()), name: clean(x.name, 20), leader: !!x.leader, owner: !!x.owner, active: x.active !== false, icon: old.icon || "", bio: old.bio || "" };
         }).filter(function (x) { return x.name; });
         if (!list.some(function (x) { return x.owner && x.active; })) return { ok: false, err: "noowner" };
         db.staff = list; save(db, "staff");
@@ -277,6 +278,16 @@ function handle(req) {
           return ar;
         }).filter(function (x) { return x.name; });
         save(db, "areas");
+        break;
+      }
+      case "myProfile": {
+        var me0 = staffById(db, by);
+        if (!me0) return { ok: false, err: "input" };
+        var nn0 = clean(req.name, 20);
+        if (!nn0) return { ok: false, err: "input" };
+        if (db.staff.some(function (x) { return x.active && x.id !== by && x.name === nn0; })) return { ok: false, err: "samename" };
+        me0.name = nn0; me0.icon = clean(req.icon, 4); me0.bio = clean(req.bio, 40);
+        save(db, "staff");
         break;
       }
       case "saveConfig": {

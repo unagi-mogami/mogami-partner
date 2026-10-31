@@ -240,7 +240,7 @@ let ui = { setup: "", allFilter: "late" };
 /* ---------- 受付係とのやりとり ---------- */
 const ERR = { code:"合言葉が違います。社長から届いた招待リンクを開き直してください。", pin:"暗証番号が違います。", locked:"間違いが続いたので15分間止めています。少し待ってからもう一度。",
   notready:"受付係の初期設定がまだです。社長の初期設定をしてください。", already:"初期設定はもう済んでいます。招待リンクから入ってください。", input:"入力に足りないところがあります。",
-  noowner:"社長を1人以上残してください。", nudged:"さっき催促したばかりです。10分あけてください。", gone:"このやることはもう消されています。" };
+  noowner:"社長を1人以上残してください。", nudged:"さっき催促したばかりです。10分あけてください。", samename:"同じ名前の人がいます。少し変えてください（例：佐藤 慧斗）。", gone:"このやることはもう消されています。" };
 async function api(action, body = {}, url = cfg.url) {
   let r;
   try {
@@ -268,6 +268,7 @@ const staff = id => (S && S.staff.find(s => s.id === id)) || null;
 const active = () => S.staff.filter(s => s.active);
 const nm = id => (staff(id) || {}).name || "（いない人）";
 const meObj = () => staff(cfg.me);
+const av = id => { const s = staff(id); return s && s.icon ? s.icon + " " : ""; };
 const isOwner = () => !!(meObj() && meObj().owner);
 const whoList = t => String(t.who || "").split(",").filter(Boolean);
 const pendingOf = t => t.mode === "all" ? whoList(t).filter(w => !(t.doneMap || {})[w]) : whoList(t);
@@ -366,7 +367,7 @@ function timeField(k, label) {
 }
 function thread(target) {
   const list = (S.comments || []).filter(c => c.target === target).sort((a,b) => a.at - b.at);
-  return `<div class="thread">${list.map(c => `<div class="cm${c.from === cfg.me ? " me" : ""}"><b>${esc(nm(c.from))}</b><p>${esc(c.text)}</p><small>${esc(fmt(c.at))}${c.from === cfg.me ? ` ・ <a href="#" data-a="cdel" data-id="${esc(c.id)}" style="color:inherit">消す</a>` : ""}</small></div>`).join("") || `<p class="hint">まだメッセージはありません。</p>`}
+  return `<div class="thread">${list.map(c => `<div class="cm${c.from === cfg.me ? " me" : ""}"><b>${esc(av(c.from) + nm(c.from))}</b><p>${esc(c.text)}</p><small>${esc(fmt(c.at))}${c.from === cfg.me ? ` ・ <a href="#" data-a="cdel" data-id="${esc(c.id)}" style="color:inherit">消す</a>` : ""}</small></div>`).join("") || `<p class="hint">まだメッセージはありません。</p>`}
     <div class="send"><textarea id="cm-${esc(target)}" maxlength="300" placeholder="メッセージを書く"></textarea><button class="btn primary sm" data-a="csend" data-id="${esc(target)}">送る</button></div></div>`;
 }
 const cCount = target => (S.comments || []).filter(c => c.target === target).length;
@@ -667,7 +668,7 @@ function viewAll() {
   return `${todayStrip()}
     ${usedCats.length ? `<div class="chips"><button data-a="cf" data-v="" aria-pressed="${!ui.cat}">すべての種類</button>${usedCats.map(([k,l]) => `<button data-a="cf" data-v="${k}" aria-pressed="${ui.cat===k}">${l}</button>`).join("")}</div>` : ""}
     <div class="seg"><button data-a="af" data-v="late" aria-pressed="${ui.allFilter==="late"}">期限切れ ${cnt(t=>t.due<now)}</button><button data-a="af" data-v="today" aria-pressed="${ui.allFilter==="today"}">今日 ${cnt(t=>t.due<=endToday.getTime())}</button><button data-a="af" data-v="all" aria-pressed="${ui.allFilter==="all"}">すべて ${open.length}</button></div>
-    ${people.length ? people.map(id => `<section class="person"><h3><span>${esc(nm(id))}${awayToday(id) ? "（今日" + esc(awayToday(id).kind) + "）" : ""}</span><span>${by[id].length}件</span></h3>${by[id].sort((a,b)=>a.due-b.due).map(taskCard).join("")}</section>`).join("")
+    ${people.length ? people.map(id => `<section class="person"><h3><span>${esc(av(id) + nm(id))}${(staff(id) || {}).bio ? `<small style="font-weight:500;letter-spacing:0;margin-left:6px">「${esc(staff(id).bio)}」</small>` : ""}${awayToday(id) ? "（今日" + esc(awayToday(id).kind) + "）" : ""}</span><span>${by[id].length}件</span></h3>${by[id].sort((a,b)=>a.due-b.due).map(taskCard).join("")}</section>`).join("")
       : `<div class="empty">${ui.allFilter==="late" ? "期限切れはありません。" : "未完了のやることはありません。"}</div>`}
     <details><summary class="muted" style="font-weight:700;cursor:pointer">🔁 繰り返しの一覧（${S.series.length}）</summary><div class="list" style="margin-top:10px">
       ${S.series.length ? S.series.map(s => `<div class="item ok"><div class="top"><div class="t">${esc(s.what)}</div><span class="pill off">${esc(ruleLabel(s.rule))}</span></div>
@@ -807,8 +808,26 @@ function sheetHtml() {
   ${F.id ? `<div class="acts"><button class="btn danger" data-a="fdel">この回を消す</button>${F.series ? `<button class="btn danger" data-a="fdelall">繰り返しを止めて消す</button>` : ""}</div>` : ""}
   </div>`;
 }
+const ICONS = ["🐟","🐉","🔥","⭐","🍀","🐶","🐱","🌸","💪","🎯","⚡","🍙","🌊","🦊","🐻","🎸"];
+let PR = null;
+function openProfile() { const m = meObj(); PR = { name: m.name, icon: m.icon || "", bio: m.bio || "" }; renderProfile(); }
+function renderProfile() {
+  const sh = $("#sheet");
+  if (!PR) { sh.hidden = true; sh.innerHTML = ""; document.body.style.overflow = ""; return; }
+  if ($("#pName")) { PR.name = $("#pName").value; PR.bio = $("#pBio").value; }
+  sh.innerHTML = `<div class="in"><div class="head"><h2>自分のプロフィール</h2><button class="btn sm ghost" data-a="pclose">閉じる</button></div>
+    <div class="panel">
+      <div class="field"><label for="pName">名前（みんなに表示されます）</label><input id="pName" maxlength="20" value="${esc(PR.name)}" autocomplete="off"></div>
+      <div class="field"><label>アイコン</label><div class="chips"><button type="button" data-a="picon" data-v="" aria-pressed="${!PR.icon}">なし</button>${ICONS.map(i => `<button type="button" data-a="picon" data-v="${i}" aria-pressed="${PR.icon === i}" style="font-size:22px;padding:4px 10px">${i}</button>`).join("")}</div></div>
+      <div class="field"><label for="pBio">ひとこと（任意・40文字まで）</label><input id="pBio" maxlength="40" value="${esc(PR.bio)}" placeholder="例：串打ち担当です！" autocomplete="off"></div>
+      <button class="btn primary big" data-a="psave" ${busy ? "disabled" : ""}>保存する</button>
+    </div>
+    <div class="panel"><h3>このスマホを別の人で使う</h3><p class="small muted">機種変更や、スマホを人に渡す時に使います。</p><button class="btn sm danger" data-a="pswitch">別の名前で入り直す</button></div></div>`;
+  sh.hidden = false; document.body.style.overflow = "hidden";
+}
 function renderSheet() {
   const sh = $("#sheet");
+  if (PR) return renderProfile();
   if (!F) { sh.hidden = true; sh.innerHTML = ""; document.body.style.overflow = ""; return; }
   const keep = document.activeElement && document.activeElement.id;
   const what = $("#fWhat") ? $("#fWhat").value : null; if (what !== null) F.what = what;
@@ -866,7 +885,7 @@ function viewAdmin() {
   <div class="panel"><h2>社員と役割</h2>
     <p class="small muted">「責任者」は、期限から${esc(adm.escMin)}分過ぎても終わっていない時に知らせが届く人です。🔔は通知がオンになっている人。</p>
     ${offList.length ? `<div class="banner warn">通知がまだオフの人：${offList.map(s => esc(s.name)).join("、")}</div>` : `<div class="banner ok">全員の通知がオンです</div>`}
-    <div>${act_.map(s => `<div class="staff-row"><div class="nm">${S.notif[s.id] ? "🔔" : "🔕"} ${esc(s.name)}</div>
+    <div>${act_.map(s => `<div class="staff-row"><div class="nm">${S.notif[s.id] ? "🔔" : "🔕"} ${esc((s.icon ? s.icon + " " : "") + s.name)}</div>
       <button class="toggle" data-a="sl" data-id="${esc(s.id)}" aria-pressed="${!!s.leader}">責任者</button>
       <button class="toggle" data-a="so" data-id="${esc(s.id)}" aria-pressed="${!!s.owner}">社長</button>
       <button class="toggle" data-a="sx" data-id="${esc(s.id)}" aria-label="${esc(s.name)}を外す">外す</button></div>`).join("")}</div>
@@ -900,7 +919,7 @@ function render() {
   const keep = ae && ae.id && $("#app").contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && ae.type !== "checkbox" ? { id: ae.id, v: ae.value } : null;
   if (!cfg.url || !cfg.code || !S) { tabs.hidden = true; fab.hidden = true; who.textContent = ""; app.innerHTML = viewSetup(); return; }
   if (!meObj()) { tabs.hidden = true; fab.hidden = true; who.textContent = ""; app.innerHTML = viewPick(); return; }
-  who.innerHTML = `<b>${esc(meObj().name)}</b>さん`;
+  who.innerHTML = `<button class="btn sm" data-a="prof" style="background:transparent;color:var(--on-sumi);border-color:rgba(255,255,255,.3);min-height:40px">${esc(av(cfg.me))}<b>${esc(meObj().name)}</b>さん ✏️</button>`;
   const now = Date.now();
   const myLate = S.tasks.filter(t => !t.done && pendingOf(t).includes(cfg.me) && t.due < now).length + todayCleanFor(cfg.me).filter(a => !cleanLog(a.id) && now > cleanDeadline(a)).length;
   const allLate = S.tasks.filter(t => !t.done && t.due < now).length;
@@ -924,6 +943,20 @@ document.addEventListener("click", async e => {
   if (tb) { tab = tb.dataset.tab; render(); window.scrollTo(0,0); return; }
   const b = e.target.closest("[data-a]"); if (!b) return;
   const a = b.dataset.a, id = b.dataset.id, v = b.dataset.v;
+  // プロフィール
+  if (a === "prof") { openProfile(); return; }
+  if (PR && a.startsWith("p") && a !== "pick" && a !== "push") {
+    if ($("#pName")) { PR.name = $("#pName").value; PR.bio = $("#pBio").value; }
+    if (a === "pclose") { PR = null; renderProfile(); return; }
+    if (a === "picon") { PR.icon = v; renderProfile(); return; }
+    if (a === "psave") {
+      if (!PR.name.trim()) { $("#pName").classList.add("bad"); toast("名前を入れてください"); return; }
+      if (busy) return; busy = true; renderProfile();
+      try { await api("myProfile", { name: PR.name.trim(), icon: PR.icon, bio: PR.bio.trim() }); toast("プロフィールを保存しました"); PR = null; } catch(x) { toast(x.message, 5000); }
+      busy = false; renderProfile(); render(); return;
+    }
+    if (a === "pswitch") { if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "本当に入り直す"; return; } PR = null; renderProfile(); cfg.me = undefined; ls.set("genba", cfg); remember(); render(); return; }
+  }
   // フォーム（シート）
   if (a.startsWith("f") && F) {
     if ($("#fWhat")) F.what = $("#fWhat").value;
