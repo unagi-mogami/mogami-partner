@@ -576,7 +576,7 @@ const pushable = "serviceWorker" in navigator && "PushManager" in window && "Not
 let swReg = null, pushOn = false;
 async function swInit() {
   if (!("serviceWorker" in navigator)) return;
-  try { swReg = await navigator.serviceWorker.register("sw.js"); } catch(e) { return; }
+  try { swReg = await navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }); swReg.update().catch(() => {}); } catch(e) { return; }
   if (!pushable) return;
   try {
     const sub = await swReg.pushManager.getSubscription();

@@ -6,20 +6,21 @@ self.addEventListener("push", e => {
   let m = {};
   try { m = e.data ? e.data.json() : {}; } catch (x) { m = { body: e.data ? e.data.text() : "" }; }
   const title = m.title || "現場ノート";
-  const alarm = m.alarm || "normal";            // normal＝ふつう / repeat＝しつこく / silent＝音なし
+  const alarm = m.alarm || "normal";            // normal＝ふつう / repeat＝アラーム / silent＝音なし
   // アプリを開いている時は、画面側でも音を鳴らす
   const tell = self.clients.matchAll({ type: "window" }).then(list => list.forEach(c => c.postMessage({ type: "push", title, alarm })));
-  e.waitUntil(Promise.all([tell, self.registration.showNotification(title, {
+  // iPhoneは同じtagの通知を「上書き」すると音を鳴らさないので、通知ごとに別のtagにする（毎回鳴らす）
+  const opt = {
     body: m.body || "開いて確認してください。",
-    tag: m.tag || undefined,
-    renotify: !!m.tag && alarm !== "silent",
-    silent: alarm === "silent",
-    requireInteraction: alarm === "repeat",
-    vibrate: alarm === "silent" ? undefined : alarm === "repeat" ? [400, 150, 400, 150, 400, 150, 800] : [200, 100, 200],
+    tag: (m.tag || "g") + "-" + Date.now(),
     icon: "icon-192.png",
     badge: "icon-192.png",
     data: { url: m.url || self.registration.scope }
-  })]));
+  };
+  if (alarm === "silent") opt.silent = true;
+  else opt.vibrate = alarm === "repeat" ? [400, 150, 400, 150, 400, 150, 800] : [200, 100, 200];
+  if (alarm === "repeat") opt.requireInteraction = true;
+  e.waitUntil(Promise.all([tell, self.registration.showNotification(title, opt)]));
 });
 
 self.addEventListener("notificationclick", e => {
