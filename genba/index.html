@@ -800,15 +800,21 @@ function viewClean() {
 }
 
 /* ---------- やることの登録・編集シート ---------- */
+const formKey = f => JSON.stringify([f.what, f.note, f.who, f.mode, f.date, f.time, f.remind, f.alarm, f.rep, f.every, f.unit, f.days, f.cat, f.rotOn, f.rot]);
+let F0 = "";    // 編集を始めた時の中身（変わったかどうかを見る）
+function saveDraft() { if (F && !F.id) { if ($("#fWhat")) F.what = $("#fWhat").value; if ($("#fNote")) F.note = $("#fNote").value; ls.set("genba-draft", F.what || F.note ? F : null); } }
 function openForm(t) {
   const now = new Date(Date.now() + 3600e3);
-  if (!t) { ui.cal = ""; F = { cat:"", rotOn:false, rot:{}, note:"", id:"", what:"", who:[cfg.me], mode:"any", date: ymd(now), time: hhmm(now), remind:0, alarm:"normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
+  const draft = !t && ls.get("genba-draft"), last = ls.get("genba-last") || {};
+  if (draft && (draft.what || draft.note)) { ui.cal = ""; F = { ...draft, restored: true }; if (new Date(F.date + "T" + F.time).getTime() < Date.now() - 3600e3) { F.date = ymd(now); F.time = hhmm(now); } renderSheet(); return; }
+  if (!t) { ui.cal = ""; F = { cat: last.cat || "", rotOn:false, rot:{}, note:"", id:"", what:"", who: (last.who || []).filter(w => staff(w) && staff(w).active).length ? last.who.filter(w => staff(w) && staff(w).active) : [cfg.me], mode: last.mode || "any", date: ymd(now), time: hhmm(now), remind: last.remind || 0, alarm: last.alarm || "normal", rep:"none", every:1, unit:"day", days:[now.getDay()], series:false }; }
   else {
     const d = new Date(t.due), s = seriesOf(t), r = s && s.rule;
     let rep = "none", unit = "day";
     if (r) { if (r.every > 1) { rep = "custom"; unit = r.type === "weekly" ? "week" : r.type === "monthly" ? "month" : "day"; } else rep = r.type; }
     ui.cal = ""; F = { cat: t.cat || "", rotOn: !!(s && s.rot && Object.keys(s.rot).length), rot: s && s.rot ? { ...s.rot } : {}, note: t.note || "", id:t.id, what:t.what, who:whoList(t), mode:t.mode || "any", date: ymd(d), time: hhmm(d), remind:t.remind || 0, alarm:t.alarm || "normal", rep, every: r ? r.every : 1, unit, days: r && r.days.length ? r.days.slice() : [d.getDay()], series: !!s };
   }
+  F0 = F.id ? formKey(F) : "";
   renderSheet();
 }
 function formRule() {
@@ -825,7 +831,8 @@ function sheetHtml() {
   const d = new Date(F.date + "T00:00");
   const reps = [["none","しない"],["daily","毎日"],["weekdays","平日"],["weekly","毎週"],["monthly","毎月"],["custom","カスタム"]];
   const wdPick = `<div class="wd">${WD.map((w,i) => `<button type="button" data-a="fd" data-v="${i}" aria-pressed="${F.days.includes(i)}">${w}</button>`).join("")}</div>`;
-  return `<div class="in"><div class="head"><h2>${F.id ? "やることを編集" : "やることを追加"}</h2><button class="btn sm ghost" data-a="fclose">閉じる</button></div>
+  return `<div class="in"><div class="head"><h2>${F.id ? "やることを編集" : "やることを追加"}</h2><button class="btn sm ghost" data-a="fclose">${F.id ? "閉じる（自動で保存）" : "閉じる"}</button></div>
+  ${F.restored ? `<div class="banner ok" style="flex-direction:row;align-items:center;justify-content:space-between">前回の書きかけを出しています<button type="button" class="btn sm ghost" data-a="fclear">消して新しく書く</button></div>` : ""}
   <form class="panel" id="taskForm">
     <div class="field"><label for="fWhat">何を</label><input id="fWhat" maxlength="80" value="${esc(F.what)}" placeholder="例：冷蔵庫の温度記録を書く" autocomplete="off"></div>
     <div class="field"><label>種類</label><div class="chips">${CATS.map(([k,l]) => `<button type="button" data-a="fcat" data-v="${k}" aria-pressed="${F.cat===k}">${l}</button>`).join("")}</div></div>
@@ -885,7 +892,7 @@ function renderSheet() {
   const keep = document.activeElement && document.activeElement.id;
   const what = $("#fWhat") ? $("#fWhat").value : null; if (what !== null) F.what = what;
   if ($("#fNote")) F.note = $("#fNote").value;
-  sh.innerHTML = sheetHtml(); sh.hidden = false; document.body.style.overflow = "hidden";
+  sh.innerHTML = sheetHtml(); sh.hidden = false; document.body.style.overflow = "hidden"; saveDraft();
   if (keep && document.getElementById(keep) && sh.contains(document.getElementById(keep))) document.getElementById(keep).focus();
 }
 async function saveForm() {
@@ -909,7 +916,7 @@ async function saveForm() {
   if (busy) return; busy = true; renderSheet();
   try {
     if (F.id) { await api("editTask", { id: F.id, ...body }); toast("保存しました"); }
-    else { await api("addTask", body); const others = (useRot ? [] : F.who).filter(w => w !== cfg.me); toast(others.length ? others.map(nm).join("・") + "さんに知らせました" : "登録しました"); }
+    else { await api("addTask", body); ls.set("genba-draft", null); ls.set("genba-last", { who: useRot ? [cfg.me] : F.who, cat: F.cat, remind: F.remind, alarm: F.alarm, mode: F.mode }); const others = (useRot ? [] : F.who).filter(w => w !== cfg.me); toast(others.length ? others.map(nm).join("・") + "さんに知らせました" : "登録しました"); }
     F = null;
   } catch(e) { toast(e.message, 5000); }
   busy = false; renderSheet(); render();
@@ -1017,7 +1024,12 @@ document.addEventListener("click", async e => {
   if (a.startsWith("f") && F) {
     if ($("#fWhat")) F.what = $("#fWhat").value;
     if ($("#fNote")) F.note = $("#fNote").value;
-    if (a === "fclose") { F = null; renderSheet(); return; }
+    if (a === "fclose") {
+      if (F.id && formKey(F) !== F0) { saveForm(); return; }                 // 編集は、閉じるだけで保存
+      if (!F.id && (F.what || "").trim()) { saveDraft(); toast("書きかけを残しました。次に「＋」を押すと続きから書けます", 4000); }
+      F = null; renderSheet(); return;
+    }
+    if (a === "fclear") { ls.set("genba-draft", null); F = null; openForm(null); return; }
     if (a === "fwho") { F.who = F.who.includes(v) ? F.who.filter(x => x !== v) : F.who.concat(v); }
     else if (a === "fall") { const all = active().map(s => s.id); F.who = all.every(x => F.who.includes(x)) ? [cfg.me] : all; }
     else if (a === "fmode") F.mode = v;
@@ -1092,6 +1104,7 @@ function syncNotice() {
 document.addEventListener("input", e => {
   const el = e.target;
   if (F && el.closest("#sheet")) {
+    if (el.id === "fWhat" || el.id === "fNote") { saveDraft(); }
     if (el.id === "fRotOn") { F.rotOn = el.checked; renderSheet(); return; }
     if (el.dataset.rot !== undefined) { F.rot[el.dataset.rot] = el.value; return; }
     if (el.id === "fDate") F.date = el.value;
