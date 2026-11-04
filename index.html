@@ -3822,14 +3822,17 @@ const jEnc = o => b64uEnc(new TextEncoder().encode(JSON.stringify(o)));
 const jDec = t => JSON.parse(new TextDecoder().decode(b64uDec(t)));
 const addDays = (ymd, n) => { const d = new Date(ymd+"T00:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const qtNo = () => { const d = today().replace(/-/g,"").slice(2); const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let r = ""; for (let i=0;i<4;i++) r += a[Math.floor(Math.random()*a.length)]; return "Q"+d+"-"+r; };
-const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], extras:[], delivery:"", ship:"1", noShip:false, memo:"", recorded:false});
+const qtBlank = () => ({no:qtNo(), date:today(), shop:(S.rec?.shop||""), person:"", items:[{id:rid(), product:"", size:"", kind:"live", qty:"", price:""}], extras:[], orderKg:"", delivery:"", ship:"1", noShip:false, memo:"", recorded:false});
 function qtGet(){ if (!S.qt) S.qt = lsGet(QT_DRAFT, null) || qtBlank(); return S.qt; }
 function qtSave(){ const q = S.qt; if (!q) return; lsSet(QT_DRAFT, q); const sv = lsGet(QT_SAVED, {}); sv[q.no] = q; const ks = Object.keys(sv); if (ks.length > 20) ks.sort((a,b)=>String(sv[a].date).localeCompare(String(sv[b].date))).slice(0, ks.length-20).forEach(k=>delete sv[k]); lsSet(QT_SAVED, sv); }
 function qtKg(it){ const P = pOf(it.size); if (it.kind==="shiro") return isNum(it.qty) && P ? Number(it.qty)/P : 0; return isNum(it.qty) ? Number(it.qty) : 0; }
 /* 価格ルールの単価（この見積全体の活鰻kgで段階を決める）。範囲があれば下限まで承認なしで下げられる */
 function qtRule(it, tier){ const p = S.products.find(x=>x.name===it.product); if (!p || !it.size) return null; return sellQuote(p, it.size, tier); }
 function qtCalc(q){
-  const totalKg = q.items.reduce((a,it)=>a+qtKg(it),0);
+  /* 価格の段階は「お客様が1回に買う量」で決める。候補を何種類か並べる見積でも合計kgで段階が変わらないよう、量を入れたらそれを使う（空欄なら全商品の合計） */
+  const sumKg = Math.round(q.items.reduce((a,it)=>a+qtKg(it),0)*100)/100;
+  const setKg = isNum(q.orderKg) && Number(q.orderKg) > 0 ? Number(q.orderKg) : null;
+  const totalKg = setKg ?? sumKg;
   const tier = tierFor(totalKg) || getPricing().tiers[0];
   const lines = [], disc = []; let base8 = 0, base10 = 0, missing = 0;
   for (const it of q.items){
@@ -3868,7 +3871,7 @@ function qtCalc(q){
       if (Number(SH.tax)===8) base8 += amt; else base10 += amt; }
   }
   const tax8 = Math.floor(base8*0.08), tax10 = Math.floor(base10*0.10);
-  return {lines, totalKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing, needShip, noDelivery: !q.delivery};
+  return {lines, totalKg, sumKg, setKg, tier, base8, base10, tax8, tax10, total:base8+base10+tax8+tax10, disc, missing, needShip, noDelivery: !q.delivery};
 }
 /* 承認：社長の署名を確かめる */
 async function aprVerify(code){
@@ -4001,13 +4004,16 @@ function quoteView(){
       h("div",{class:"act"}, h("button",{class:"btn sm ghost", onclick:()=>{ S.qt = qtBlank(); qtSave(); render(); }},"新しい見積書"))),
     h("section",{class:"panel stack"},
       h("div",{class:"grid2"},
-        field("お店の名前（宛名）", h("input",{class:"i shopname", id:"qt-shop", placeholder:"例：うなぎ処 ○○", value:q.shop, oninput:e=>{ q.shop = e.target.value; qtSave(); }, onchange:()=>render()})),
+        h("div",{class:"stack"},
+          field("お店の名前（宛名）", h("input",{class:"i shopname", id:"qt-shop", placeholder:"例：うなぎ処 ○○", value:q.shop, oninput:e=>{ q.shop = e.target.value; qtSave(); }, onchange:()=>render()})),
+          field("1回の注文量（活鰻kg）", h("input",{class:"i", id:"qt-orderkg", type:"number", inputmode:"decimal", min:0, placeholder:"空欄なら合計 "+num(c.sumKg,1).replace(/\.0$/,"")+"kg", value:q.orderKg??"", oninput:e=>{ q.orderKg = e.target.value; qtSave(); }, onchange:()=>render()}),
+            "候補を何種類か並べる時は、お客様が1回に買う量（例：10）を入れてください。全部の商品がこの量の価格になります。"),
+          h("p",{class:"small muted",style:"margin:0"}, "1回の量：活鰻 約"+num(c.totalKg,1).replace(/\.0$/,"")+"kg"+(c.setKg!=null ? "（入力した量）" : "（全商品の合計）")+"→ "+tierLabel(c.tier)+"の価格で計算"+(c.tier.note ? "　"+c.tier.note : ""))),
         field("ご担当者（任意）", h("input",{class:"i", id:"qt-person", placeholder:"例：店主 ○○", value:q.person, oninput:e=>{ q.person = e.target.value; qtSave(); }, onchange:()=>render()})))),
     items,
     h("div",null, h("button",{class:"btn", onclick:()=>upd(()=>{ q.items.push({id:rid(), product:"", size:"", kind:"live", qty:"", price:""}); })},"＋ うなぎを追加")),
     qtExtrasEditor(q, c, upd),
-    h("section",{class:"panel stack"}, field("備考（任意）", h("input",{class:"i", id:"qt-memo", placeholder:"例：納品は毎週火曜", value:q.memo, oninput:e=>{ q.memo = e.target.value; qtSave(); }, onchange:()=>render()})),
-      h("p",{class:"small muted",style:"margin:0"}, "1回の量：活鰻 約"+num(c.totalKg,1).replace(/\.0$/,"")+"kg（"+tierLabel(c.tier)+"の価格で計算）"+(c.tier.note ? "　"+c.tier.note : ""))),
+    h("section",{class:"panel stack"}, field("備考（任意）", h("input",{class:"i", id:"qt-memo", placeholder:"例：納品は毎週火曜", value:q.memo, oninput:e=>{ q.memo = e.target.value; qtSave(); }, onchange:()=>render()}))),
     c.missing ? h("div",{class:"banner warn"}, h("div",null,"商品・サイズ・数量がそろっていない行があります。")) : null,
     appr.need && !appr.ok ? h("section",{class:"panel stack",style:"border:2px solid var(--red)"},
       h("b",null,"値引きの承認が必要です"),
