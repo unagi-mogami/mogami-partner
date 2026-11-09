@@ -508,7 +508,7 @@ const DEFAULT_PRICING = {targetMargin:20, maxKg:100, tiers:[
   {from:10, to:20, mode:"pct", pct:null, low:null, high:null}, {from:20, to:null, mode:"pct", pct:null, low:null, high:null}]};
 /* 旧形式（0〜2の3段階）で保存されたデータを1〜5に読み替える */
 function normScale(o){ if (!o || o.v===2) return o; const c = x => isNum(x) ? Number(x)*2+1 : x; return {...o, fat:c(o.fat), skin:c(o.skin), flesh:c(o.flesh), v:2}; }
-const SIZES = ["3P","3.5P","4P","4.5P","5P","5.5P","6P"];
+const SIZES = ["2P","2.5P","3P","3.5P","4P","4.5P","5P","5.5P","6P"];
 const pOf = sz => parseFloat(sz);  /* "4.5P" → 4.5（1kgあたりの尾数） */
 const gOf = sz => Math.round(1000/pOf(sz));
 /* 仕入れで重視する条件（複数選択）。キーは評価項目 CRIT と同じ */
@@ -538,7 +538,7 @@ const QUESTIONS = [
   {key:"oil", title:"脂の強さの好みは？", opts:[{v:1,l:"少なめ",s:"脂控えめ・軽い口当たり"},{v:3,l:"ほどよい",s:"バランス型"},{v:5,l:"多め",s:"脂がしっかり乗っている"}]},
   {key:"skin", title:"皮の好みは？", opts:[{v:1,l:"薄め（柔らかめ）",s:"口当たり重視"},{v:3,l:"標準",s:"特にこだわりなし"},{v:5,l:"厚め（硬め）",s:"焼いて香ばしく"}]},
   {key:"flesh", title:"身質の好みは？", opts:[{v:1,l:"ふっくら柔らかい",s:"とろける食感"},{v:3,l:"適度な弾力",s:"標準的"},{v:5,l:"筋肉質",s:"身が締まっている"}]},
-  {key:"size", title:"希望サイズは？", opts:[...["3P","3.5P","4P","4.5P","5P","5.5P","6P"].map(v=>({v, l:v, s:"1kgあたり"+parseFloat(v)+"尾・約"+Math.round(1000/parseFloat(v))+"g"})), {v:"any",l:"おまかせ",s:"サイズ条件なし"}]},
+  {key:"size", title:"希望サイズは？", opts:[...SIZES.map(v=>({v, l:v, s:"1kgあたり"+parseFloat(v)+"尾・約"+Math.round(1000/parseFloat(v))+"g"})), {v:"any",l:"おまかせ",s:"サイズ条件なし"}]},
   {key:"orderKg", title:"1回の注文量は？", note:"注文量によって販売単価が変わります", opts:()=>[...getPricing().tiers.map(t=>({v:String(t.from), l:tierLabel(t), s:"1回あたり"})), {v:"", l:"まだ決まっていない", s:"小口の価格で試算"}]},
   {key:"priorities", multi:true, title:"仕入れで重視することは？", note:"当てはまるものをすべて選んでください（いくつでも）", opts:Object.keys(PRIORITY).map(k=>({v:k, l:PRIORITY[k], s:PRIORITY_SUB[k]}))}
 ];

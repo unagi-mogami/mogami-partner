@@ -208,7 +208,9 @@ if sync_playwright:
                     if done.count(): done.first.click(); pg.wait_for_timeout(400); break
                     opt = pg.locator("main .opt")
                     if not opt.count(): break
-                    opt.first.click(); pg.wait_for_timeout(250)
+                    # サイズは「おまかせ」を選ぶ（まだ商品がないサイズでも結果が出るように）
+                    anyopt = pg.locator("main .opt", has_text="おまかせ")
+                    (anyopt.first if anyopt.count() else opt.first).click(); pg.wait_for_timeout(250)
                 lines = pg.locator("main a.btn.line")
                 if not lines.count(): bad("診断結果が出ない、または結果に「LINEで送る」がない")
                 else:
